@@ -16,17 +16,20 @@ class GenServer[StateT]:
 
     def handle_cast(self, state: StateT, body: Any) -> Generator[Any, Any, StateT]:
         """Handle a cast message. Return the new state."""
+
         yield
 
     def handle_call(
         self, state: StateT, body: Any
     ) -> Generator[Any, Any, tuple[StateT, Any]]:
         """Handle a call message. Return the new state and the reply to the caller"""
+
         raise NotImplementedError
         yield
 
     def loop(self, *args: Any) -> Generator[EReceive | ESend, Envelope | None, None]:
         """The main loop for the process. Receive messages, and handle them appropriately."""
+
         state = self.init(*args)
 
         while True:
@@ -42,7 +45,8 @@ class GenServer[StateT]:
 
 
 def call(pid: Pid, body: Any) -> Generator[ESend | EReceive, None | Envelope, Any]:
-    """Synchronous request — sends a CallMsg and blocks until a matching ReplyMsg arrives."""
+    """Synchronous request — sends a CallMsg and blocks until a matching ReplyMsg arrives"""
+
     ref = next(_ref_counter)
 
     yield ESend(pid, CallMsg(ref=ref, body=body))
@@ -58,6 +62,7 @@ def call_timeout(
     pid: Pid, body: Any, timeout_ms: int
 ) -> Generator[ESend | EReceiveTimeout, None | Envelope, Any]:
     """Synchronous request with a deadline — returns the reply body, or None on timeout."""
+
     ref = next(_ref_counter)
 
     yield ESend(pid, CallMsg(ref=ref, body=body))

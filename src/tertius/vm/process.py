@@ -4,7 +4,7 @@ from typing import Any
 import zmq
 from orbis import complete
 
-from tertius.constants import CRASH, READY
+from tertius.constants import READY
 from tertius.effects import EMonitor, EReceive, EReceiveTimeout, ERegister, ESelf, ESend, ESpawn, EWhereis
 from tertius.types import Envelope, Pid
 from tertius.vm.messages import (
