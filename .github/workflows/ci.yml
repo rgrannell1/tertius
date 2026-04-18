@@ -12,15 +12,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          path: tertius
       - uses: actions/checkout@v4
         with:
           repository: rgrannell1/orbis
-          path: ../orbis
+          path: orbis
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.15"
       - run: uv sync --all-groups
+        working-directory: tertius
       - run: uv run pytest --cov --cov-branch --cov-report=xml
+        working-directory: tertius
       - uses: codecov/codecov-action@v4
         with:
           files: coverage.xml
