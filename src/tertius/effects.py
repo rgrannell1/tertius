@@ -79,6 +79,14 @@ class EReceiveTimeout(Effect[Envelope | None]):
 
 
 @dataclass
+class ESleep(Effect[None]):
+    """Suspend the process for ms milliseconds."""
+
+    tag: ClassVar[str] = "sleep"
+    ms: int
+
+
+@dataclass
 class EEmit[BodyT](Event):
     """Emit an event to the caller of run()."""
 

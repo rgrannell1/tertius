@@ -9,6 +9,7 @@ from tertius.effects import (
     ERegister,
     ESelf,
     ESend,
+    ESleep,
     ESpawn,
     EWhereis,
 )
@@ -31,6 +32,7 @@ __all__ = [
     "ERegister",
     "ESelf",
     "ESend",
+    "ESleep",
     "ESpawn",
     "EWhereis",
     "GenServer",

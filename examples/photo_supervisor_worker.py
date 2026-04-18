@@ -129,4 +129,5 @@ def supervisor() -> Generator[Any, Any, None]:
 
 
 if __name__ == "__main__":
-    run(supervisor, scope={"worker": worker})
+    for x in run(supervisor, scope={"worker": worker}):
+        print(x)

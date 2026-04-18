@@ -40,9 +40,13 @@ class VM:
         ctrl.identity = bytes(root_pid)
         ctrl.connect(self._ctrl_addr)
 
+        root_exc: list[BaseException] = []
+
         def root_thread() -> None:
             try:
                 complete(fn(*args), **make_handlers(root_pid, dealer, ctrl))
+            except Exception as err:
+                root_exc.append(err)
             finally:
                 dealer.close()
                 ctrl.close()
@@ -54,6 +58,8 @@ class VM:
         while True:
             event = self._broker.emit_queue.get()
             if event is _DONE:
+                if root_exc:
+                    raise root_exc[0]
                 return
             yield event
 
