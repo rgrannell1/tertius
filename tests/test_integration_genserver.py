@@ -17,19 +17,17 @@ class Counter(GenServer[int]):
     def init(self, initial: int = 0) -> int:
         return initial
 
-    def handle_cast(self, state: int, body: Any) -> Generator[Any, Any, int]:
+    def handle_cast(self, state: int, body: Any) -> int:
         match body:
             case ("inc", n):
                 return state + n
             case _:
                 return state
-        yield
 
-    def handle_call(self, state: int, body: Any) -> Generator[Any, Any, tuple[int, Any]]:
+    def handle_call(self, state: int, body: Any) -> tuple[int, int]:
         match body:
             case "get":
                 return state, state
-        yield
 
 
 def run_counter(initial: int) -> Generator[Any, Any, None]:

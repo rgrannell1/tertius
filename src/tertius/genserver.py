@@ -1,3 +1,4 @@
+import inspect
 from collections.abc import Generator
 from itertools import count
 from typing import Any
@@ -14,18 +15,13 @@ class GenServer[StateT]:
     def init(self, *args: Any) -> StateT:
         raise NotImplementedError
 
-    def handle_cast(self, state: StateT, body: Any) -> Generator[Any, Any, StateT]:
-        """Handle a cast message. Return the new state."""
+    def handle_cast(self, state: StateT, body: Any) -> Any:
+        """Handle a cast message. Return the new state, or yield effects then return it."""
+        return state
 
-        yield
-
-    def handle_call(
-        self, state: StateT, body: Any
-    ) -> Generator[Any, Any, tuple[StateT, Any]]:
-        """Handle a call message. Return the new state and the reply to the caller"""
-
+    def handle_call(self, state: StateT, body: Any) -> Any:
+        """Handle a call message. Return (new_state, reply), or yield effects then return it."""
         raise NotImplementedError
-        yield
 
     def loop(self, *args: Any) -> Generator[EReceive | ESend, Envelope | None, None]:
         """The main loop for the process. Receive messages, and handle them appropriately."""
@@ -37,10 +33,12 @@ class GenServer[StateT]:
 
             match envelope.body:
                 case CastMsg(body=body):
-                    state = yield from self.handle_cast(state, body)
+                    result = self.handle_cast(state, body)
+                    state = (yield from result) if inspect.isgenerator(result) else result
 
                 case CallMsg(ref=ref, body=body):
-                    state, reply = yield from self.handle_call(state, body)
+                    result = self.handle_call(state, body)
+                    state, reply = (yield from result) if inspect.isgenerator(result) else result
                     yield ESend(envelope.sender, ReplyMsg(ref=ref, body=reply))
 
 

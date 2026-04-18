@@ -120,12 +120,17 @@ class Broker:
         self._links.setdefault(target_pid, []).append(requester_pid)
 
     def _handle_monitor(
-        self, router: "zmq.Socket[bytes]", requester: bytes, frames: list[bytes]
+        self, router: "zmq.Socket[bytes]", requester: bytes, frames: list[bytes], notifier: "zmq.Socket[bytes]"
     ) -> None:
-        """Monitor a process for crashes"""
+        """Monitor a process for crashes; immediately notify if target is already dead."""
         target_pid = decode_monitor(frames)
-        self._monitors.setdefault(target_pid, []).append(Pid.from_bytes(requester))
+        requester_pid = Pid.from_bytes(requester)
         router.send_multipart([requester, OK])
+        if target_pid in self._dead:
+            crash_msg = ProcessCrash(pid=target_pid, reason=self._dead[target_pid])
+            notifier.send_multipart(encode_crash_notification(requester_pid, target_pid, crash_msg))
+            return
+        self._monitors.setdefault(target_pid, []).append(requester_pid)
 
     def _handle_crash(
         self,
@@ -180,7 +185,7 @@ class Broker:
                 router, requester, frames
             ),
             MONITOR: lambda router, requester, frames: self._handle_monitor(
-                router, requester, frames
+                router, requester, frames, notifier
             ),
             CRASH: lambda router, requester, frames: self._handle_crash(
                 router, requester, frames, notifier

@@ -17,9 +17,8 @@ class Echo(GenServer[None]):
     def init(self) -> None:
         return None
 
-    def handle_call(self, state: None, body: Any) -> Generator[Any, Any, tuple[None, Any]]:
+    def handle_call(self, state: None, body: Any) -> tuple[None, Any]:
         return state, body
-        yield
 
 
 def run_echo() -> Generator[Any, Any, None]:
