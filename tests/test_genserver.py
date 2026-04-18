@@ -5,7 +5,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from orbis import complete
 
-from tertius.decorators import GenServer, call, call_timeout, cast
+from tertius.genserver import GenServer, call, call_timeout, cast
 from tertius.effects import EReceive, EReceiveTimeout, ESend
 from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
 

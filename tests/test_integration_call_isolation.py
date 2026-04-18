@@ -2,7 +2,7 @@
 from collections.abc import Generator
 from typing import Any
 
-from tertius.decorators import GenServer, call, cast
+from tertius.genserver import GenServer, call, cast
 from tertius.effects import EReceive, ESelf, ESpawn
 from tertius.types import CastMsg, Envelope, Pid
 from tertius.vm import run

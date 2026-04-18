@@ -5,7 +5,7 @@ from typing import Any, ClassVar
 
 from orbis import Effect, complete
 
-from tertius.decorators import cast
+from tertius.genserver import cast
 from tertius.effects import EReceive
 from tertius.types import Envelope, Pid
 

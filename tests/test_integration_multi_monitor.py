@@ -2,7 +2,7 @@
 from collections.abc import Generator
 from typing import Any
 
-from tertius.decorators import cast
+from tertius.genserver import cast
 from tertius.effects import EMonitor, EReceive, ESelf, ESend, ESpawn
 from tertius.exceptions import ProcessCrash
 from tertius.types import CastMsg, Envelope, Pid

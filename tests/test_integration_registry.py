@@ -1,6 +1,6 @@
 """Integration tests for ERegister / EWhereis — name-based process lookup."""
 
-from tertius.decorators import cast
+from tertius.genserver import cast
 from collections.abc import Generator
 from typing import Any
 
@@ -22,7 +22,7 @@ def register_and_wait(name: str) -> Generator[Any, Any, None]:
 
     match envelope.body:
         case CastMsg(body=body):
-            yield from __import__("tertius.decorators", fromlist=["cast"]).cast(
+            yield from __import__("tertius.genserver", fromlist=["cast"]).cast(
                 envelope.sender, body
             )
 

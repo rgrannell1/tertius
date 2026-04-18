@@ -4,7 +4,7 @@ from collections.abc import Generator
 from typing import Any
 
 from tertius.effects import EReceiveTimeout, ESelf, ESpawn
-from tertius.decorators import cast
+from tertius.genserver import cast
 from tertius.types import CastMsg, Envelope, Pid
 from tertius.vm import run
 

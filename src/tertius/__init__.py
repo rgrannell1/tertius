@@ -1,4 +1,4 @@
-from tertius.decorators import GenServer, call, call_timeout, cast
+from tertius.genserver import GenServer, call, call_timeout, cast
 from tertius.effects import EMonitor, EReceive, EReceiveTimeout, ERegister, ESelf, ESend, ESpawn, EWhereis
 from tertius.exceptions import DeadProcess, ProcessCrash, TertiusError
 from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
