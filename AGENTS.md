@@ -1,0 +1,8 @@
+- Tertius is an erlang-like VM + processes system build on algebraic effects
+- /home/rg/Code/orbis is the algebraic effects system
+- It is a UV project
+- It uses `/home/rg/Code/rs` as a build system
+- Run tests with `rs test`
+- Lint and type-check with `rs lint`
+- No single-letter variable names
+- It is critical to preserve as much type-information as possible, as that's a primary benefit of algebraic effects

@@ -1,0 +1,80 @@
+"""Integration tests for call() ref isolation under concurrent callers."""
+from collections.abc import Generator
+from typing import Any
+
+from tertius.decorators import GenServer, call, cast
+from tertius.effects import EReceive, ESelf, ESpawn
+from tertius.types import CastMsg, Envelope, Pid
+from tertius.vm import run
+
+
+# ---------------------------------------------------------------------------
+# Echo GenServer — replies with whatever body it receives
+# ---------------------------------------------------------------------------
+
+
+class Echo(GenServer[None]):
+    def init(self) -> None:
+        return None
+
+    def handle_call(self, state: None, body: Any) -> Generator[Any, Any, tuple[None, Any]]:
+        return state, body
+        yield
+
+
+def run_echo() -> Generator[Any, Any, None]:
+    yield from Echo().loop()
+
+
+# ---------------------------------------------------------------------------
+# Caller fixture
+# ---------------------------------------------------------------------------
+
+
+def caller(
+    server_pid_bytes: bytes, collector_pid_bytes: bytes, body: Any
+) -> Generator[Any, Any, None]:
+    server = Pid.from_bytes(server_pid_bytes)
+    collector = Pid.from_bytes(collector_pid_bytes)
+    reply = yield from call(server, body)
+    yield from cast(collector, reply)
+
+
+# ---------------------------------------------------------------------------
+# Root program
+# ---------------------------------------------------------------------------
+
+
+def _root_concurrent_calls() -> Generator[Any, Any, list[Any]]:
+    me: Pid = yield ESelf()
+    server: Pid = yield ESpawn(fn_name="tests.test_integration_call_isolation:run_echo")
+
+    yield ESpawn(
+        fn_name="tests.test_integration_call_isolation:caller",
+        args=(bytes(server), bytes(me), "hello"),
+    )
+    yield ESpawn(
+        fn_name="tests.test_integration_call_isolation:caller",
+        args=(bytes(server), bytes(me), "world"),
+    )
+
+    results = []
+    for _ in range(2):
+        envelope: Envelope = yield EReceive()
+        match envelope.body:
+            case CastMsg(body=body):
+                results.append(body)
+
+    return sorted(results)
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+
+def test_concurrent_callers_each_receive_correct_reply():
+    """Proves that two concurrent callers each receive their own reply, not each other's."""
+
+    results = run(_root_concurrent_calls)
+    assert results == ["hello", "world"]

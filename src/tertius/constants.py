@@ -1,0 +1,7 @@
+SPAWN = b"spawn"
+REGISTER = b"register"
+WHEREIS = b"whereis"
+MONITOR = b"monitor"
+CRASH = b"crash"
+READY = b"ready"
+OK = b"ok"

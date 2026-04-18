@@ -1,0 +1,27 @@
+[project]
+name = "tertius"
+version = "0.1.0"
+requires-python = ">=3.15"
+dependencies = [
+    "pyzmq>=26.0.0",
+]
+
+[tool.uv.sources]
+orbis = { path = "../orbis", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.152.1",
+    "orbis",
+    "pytest>=9.0.3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tertius"]
+
+[tool.mypy]
+strict = true
