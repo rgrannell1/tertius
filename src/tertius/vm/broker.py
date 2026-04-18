@@ -1,5 +1,8 @@
 import multiprocessing
 import threading
+from collections.abc import Callable
+from typing import Any
+
 import zmq
 
 from tertius.constants import CRASH, MONITOR, OK, READY, REGISTER, SPAWN, WHEREIS
@@ -17,14 +20,17 @@ from tertius.vm.messages import (
 )
 from tertius.vm.process import process_entry
 
+Scope = dict[str, Callable[..., Any]]
+
 
 class Broker:
     def __init__(
-        self, broker_addr: str, ctrl_addr: str, ctx: "zmq.Context[bytes]"
+        self, broker_addr: str, ctrl_addr: str, ctx: "zmq.Context[bytes]", scope: Scope
     ) -> None:
         self._broker_addr = broker_addr
         self._ctrl_addr = ctrl_addr
         self._ctx = ctx
+        self._scope = scope
         self._next_pid = 0
         self._pid_lock = threading.Lock()
         self._names: dict[str, Pid] = {}
@@ -57,10 +63,12 @@ class Broker:
     ) -> None:
         """Spawn a new process and wait for it to signal readiness before returning its pid."""
         fn_name, args = decode_spawn(frames)
+        if fn_name not in self._scope:
+            raise KeyError(f"ESpawn: {fn_name!r} not in scope; available: {sorted(self._scope)}")
         new_pid = self.alloc_pid()
         proc = multiprocessing.Process(
             target=process_entry,
-            args=(new_pid.id, self._broker_addr, self._ctrl_addr, fn_name, args),
+            args=(new_pid.id, self._broker_addr, self._ctrl_addr, fn_name, args, self._scope),
             daemon=True,
         )
         proc.start()

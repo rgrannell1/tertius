@@ -1,3 +1,6 @@
+import sys
+import traceback
+from collections.abc import Callable
 from functools import partial
 from typing import Any
 
@@ -18,7 +21,6 @@ from tertius.vm.messages import (
     encode_spawn,
     encode_whereis,
 )
-from tertius.vm.scope import resolve_fn
 
 
 def _handle_self(pid: Pid, _effect: ESelf) -> Pid:
@@ -101,30 +103,31 @@ def process_entry(
     ctrl_addr: str,
     fn_name: str,
     args: tuple[Any, ...],
+    scope: dict[str, Callable[..., Any]],
 ) -> None:
     """Entry point for each spawned OS process. Must be module-level to be picklable."""
 
     ctx = zmq.Context()
     pid = Pid(pid_int)
 
-    # Data socket: fire-and-forget message routing via the broker (ESend/EReceive)
     dealer: zmq.Socket[bytes] = ctx.socket(zmq.DEALER)
     dealer.identity = bytes(pid)
     dealer.connect(broker_addr)
 
-    # Control socket: request/reply for VM operations (ESpawn, ERegister, EWhereis, EMonitor)
     ctrl: zmq.Socket[bytes] = ctx.socket(zmq.DEALER)
     ctrl.identity = bytes(pid)
     ctrl.connect(ctrl_addr)
 
     try:
         ctrl.send_multipart([READY])
-        ctrl.recv_multipart()  # wait for broker ack before running
-        fn = resolve_fn(fn_name)
+        ctrl.recv_multipart()
+        fn = scope[fn_name]
         complete(fn(*args), **make_handlers(pid, dealer, ctrl))
     except Exception as err:
+        print(f"[tertius] process {pid} crashed: {err}", file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
         ctrl.send_multipart(encode_crash(err))
-        ctrl.recv_multipart()  # wait for ack before closing
+        ctrl.recv_multipart()
     finally:
         dealer.close()
         ctrl.close()

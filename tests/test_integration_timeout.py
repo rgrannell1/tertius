@@ -4,7 +4,7 @@ from collections.abc import Generator
 from typing import Any
 
 from tertius.effects import EReceiveTimeout, ESelf, ESpawn
-from tertius.genserver import cast
+from tertius.genserver import mcast
 from tertius.types import CastMsg, Envelope, Pid
 from tertius.vm import run
 
@@ -18,7 +18,7 @@ def send_after_delay(target_pid_bytes: bytes, delay_ms: int, body: Any) -> Gener
     """Sleep then send a message. Uses a busy-wait to avoid importing time in generator."""
 
     time.sleep(delay_ms / 1000)
-    yield from cast(Pid.from_bytes(target_pid_bytes), body)
+    yield from mcast(Pid.from_bytes(target_pid_bytes), body)
 
 
 # ---------------------------------------------------------------------------
@@ -30,10 +30,13 @@ def _root_no_message() -> Generator[Any, Any, None]:
     return (yield EReceiveTimeout(timeout_ms=50))
 
 
+_SCOPE = {"send_after_delay": send_after_delay}
+
+
 def test_receive_timeout_returns_none_when_no_message():
     """Proves that EReceiveTimeout returns None when no message arrives within the window."""
 
-    result = run(_root_no_message)
+    result = run(_root_no_message, scope=_SCOPE)
     assert result is None
 
 
@@ -41,7 +44,7 @@ def _root_message_arrives_in_time() -> Generator[Any, Any, Any]:
     me: Pid = yield ESelf()
 
     yield ESpawn(
-        fn_name="tests.test_integration_timeout:send_after_delay",
+        fn_name="send_after_delay",
         args=(bytes(me), 20, "on-time"),
     )
 
@@ -57,5 +60,5 @@ def _root_message_arrives_in_time() -> Generator[Any, Any, Any]:
 def test_receive_timeout_returns_message_when_it_arrives():
     """Proves that EReceiveTimeout returns the envelope when a message arrives before the deadline."""
 
-    result = run(_root_message_arrives_in_time)
+    result = run(_root_message_arrives_in_time, scope=_SCOPE)
     assert result == "on-time"

@@ -27,13 +27,15 @@ def exit_cleanly() -> Generator[Any, Any, None]:
     yield
 
 
+_SCOPE = {"crash_immediately": crash_immediately, "exit_cleanly": exit_cleanly}
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
 
 def _root_monitor_crash() -> Generator[Any, Any, ProcessCrash]:
-    worker: Pid = yield ESpawn(fn_name="tests.test_integration_monitor:crash_immediately")
+    worker: Pid = yield ESpawn(fn_name="crash_immediately")
     yield EMonitor(pid=worker)
     envelope: Envelope = yield EReceive()
 
@@ -43,14 +45,14 @@ def _root_monitor_crash() -> Generator[Any, Any, ProcessCrash]:
 def test_monitor_receives_process_crash():
     """Proves that a monitored process crash delivers a ProcessCrash to the watcher."""
 
-    result = run(_root_monitor_crash)
+    result = run(_root_monitor_crash, scope=_SCOPE)
     assert isinstance(result, ProcessCrash)
     assert isinstance(result.reason, RuntimeError)
     assert str(result.reason) == "boom"
 
 
 def _root_monitor_then_check_pid() -> Generator[Any, Any, Pid]:
-    worker: Pid = yield ESpawn(fn_name="tests.test_integration_monitor:crash_immediately")
+    worker: Pid = yield ESpawn(fn_name="crash_immediately")
     yield EMonitor(pid=worker)
     envelope: Envelope = yield EReceive()
     crash: ProcessCrash = envelope.body
@@ -61,5 +63,5 @@ def _root_monitor_then_check_pid() -> Generator[Any, Any, Pid]:
 def test_crash_notification_carries_correct_pid():
     """Proves that the ProcessCrash.pid matches the monitored process's pid."""
 
-    worker_pid = run(_root_monitor_then_check_pid)
+    worker_pid = run(_root_monitor_then_check_pid, scope=_SCOPE)
     assert isinstance(worker_pid, Pid)

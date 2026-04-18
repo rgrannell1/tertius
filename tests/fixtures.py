@@ -5,7 +5,7 @@ from typing import Any, ClassVar
 
 from orbis import Effect, complete
 
-from tertius.genserver import cast
+from tertius.genserver import mcast
 from tertius.effects import EReceive
 from tertius.types import Envelope, Pid
 
@@ -46,7 +46,7 @@ def run_marco_polo_and_report(collector_pid_bytes: bytes) -> Generator[Any, Any,
 
     collector = Pid.from_bytes(collector_pid_bytes)
     result = complete(marco_polo(), marco=handle_marco, polo=handle_polo)
-    yield from cast(collector, result)
+    yield from mcast(collector, result)
 
 
 def collect_results(expected: int) -> Generator[Any, Any, list[Any]]:

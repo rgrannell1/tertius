@@ -2,7 +2,7 @@
 from collections.abc import Generator
 from typing import Any
 
-from tertius.genserver import GenServer, call, call_timeout, cast
+from tertius.genserver import GenServer, mcall, mcall_timeout, mcast
 from tertius.effects import ESpawn
 from tertius.types import Pid
 from tertius.vm import run
@@ -43,31 +43,31 @@ def run_counter(initial: int) -> Generator[Any, Any, None]:
 
 def _root_cast_then_call() -> Generator[Any, Any, int]:
     server: Pid = yield ESpawn(
-        fn_name="tests.test_integration_genserver:run_counter",
+        fn_name="run_counter",
         args=(0,),
     )
-    yield from cast(server, ("inc", 5))
-    yield from cast(server, ("inc", 3))
-    return (yield from call(server, "get"))
+    yield from mcast(server, ("inc", 5))
+    yield from mcast(server, ("inc", 3))
+    return (yield from mcall(server, "get"))
 
 
 def _root_call_does_not_mutate() -> Generator[Any, Any, tuple[int, int]]:
     server: Pid = yield ESpawn(
-        fn_name="tests.test_integration_genserver:run_counter",
+        fn_name="run_counter",
         args=(10,),
     )
-    first = yield from call(server, "get")
-    second = yield from call(server, "get")
+    first = yield from mcall(server, "get")
+    second = yield from mcall(server, "get")
     return first, second
 
 
 def _root_unknown_cast_ignored() -> Generator[Any, Any, int]:
     server: Pid = yield ESpawn(
-        fn_name="tests.test_integration_genserver:run_counter",
+        fn_name="run_counter",
         args=(7,),
     )
-    yield from cast(server, "unknown-message")
-    return (yield from call(server, "get"))
+    yield from mcast(server, "unknown-message")
+    return (yield from mcall(server, "get"))
 
 
 # ---------------------------------------------------------------------------
@@ -75,24 +75,27 @@ def _root_unknown_cast_ignored() -> Generator[Any, Any, int]:
 # ---------------------------------------------------------------------------
 
 
+_SCOPE = {"run_counter": run_counter}
+
+
 def test_cast_accumulates_state_across_processes():
     """Proves that cast messages mutate GenServer state in a real process."""
 
-    result = run(_root_cast_then_call)
+    result = run(_root_cast_then_call, scope=_SCOPE)
     assert result == 8
 
 
 def test_call_does_not_mutate_state_across_processes():
     """Proves that two consecutive get calls return the same value in a real process."""
 
-    first, second = run(_root_call_does_not_mutate)
+    first, second = run(_root_call_does_not_mutate, scope=_SCOPE)
     assert first == second == 10
 
 
 def test_unknown_cast_leaves_state_unchanged_across_processes():
     """Proves that an unrecognised cast body leaves state intact in a real process."""
 
-    result = run(_root_unknown_cast_ignored)
+    result = run(_root_unknown_cast_ignored, scope=_SCOPE)
     assert result == 7
 
 
@@ -103,27 +106,27 @@ def test_unknown_cast_leaves_state_unchanged_across_processes():
 
 def _root_call_timeout_succeeds() -> Generator[Any, Any, Any]:
     server: Pid = yield ESpawn(
-        fn_name="tests.test_integration_genserver:run_counter",
+        fn_name="run_counter",
         args=(42,),
     )
-    return (yield from call_timeout(server, "get", timeout_ms=2000))
+    return (yield from mcall_timeout(server, "get", timeout_ms=2000))
 
 
 def _root_call_timeout_fires() -> Generator[Any, Any, Any]:
     """Call a process that doesn't exist — timeout must fire."""
     ghost = Pid(99999)
-    return (yield from call_timeout(ghost, "get", timeout_ms=50))
+    return (yield from mcall_timeout(ghost, "get", timeout_ms=50))
 
 
 def test_call_timeout_returns_reply_when_server_is_alive():
     """Proves that call_timeout returns the reply when the server responds in time."""
 
-    result = run(_root_call_timeout_succeeds)
+    result = run(_root_call_timeout_succeeds, scope=_SCOPE)
     assert result == 42
 
 
 def test_call_timeout_returns_none_when_server_is_unreachable():
     """Proves that call_timeout returns None when no reply arrives within the deadline."""
 
-    result = run(_root_call_timeout_fires)
+    result = run(_root_call_timeout_fires, scope=_SCOPE)
     assert result is None

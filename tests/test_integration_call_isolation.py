@@ -2,7 +2,7 @@
 from collections.abc import Generator
 from typing import Any
 
-from tertius.genserver import GenServer, call, cast
+from tertius.genserver import GenServer, mcall, mcast
 from tertius.effects import EReceive, ESelf, ESpawn
 from tertius.types import CastMsg, Envelope, Pid
 from tertius.vm import run
@@ -36,8 +36,8 @@ def caller(
 ) -> Generator[Any, Any, None]:
     server = Pid.from_bytes(server_pid_bytes)
     collector = Pid.from_bytes(collector_pid_bytes)
-    reply = yield from call(server, body)
-    yield from cast(collector, reply)
+    reply = yield from mcall(server, body)
+    yield from mcast(collector, reply)
 
 
 # ---------------------------------------------------------------------------
@@ -47,14 +47,14 @@ def caller(
 
 def _root_concurrent_calls() -> Generator[Any, Any, list[Any]]:
     me: Pid = yield ESelf()
-    server: Pid = yield ESpawn(fn_name="tests.test_integration_call_isolation:run_echo")
+    server: Pid = yield ESpawn(fn_name="run_echo")
 
     yield ESpawn(
-        fn_name="tests.test_integration_call_isolation:caller",
+        fn_name="caller",
         args=(bytes(server), bytes(me), "hello"),
     )
     yield ESpawn(
-        fn_name="tests.test_integration_call_isolation:caller",
+        fn_name="caller",
         args=(bytes(server), bytes(me), "world"),
     )
 
@@ -68,6 +68,8 @@ def _root_concurrent_calls() -> Generator[Any, Any, list[Any]]:
     return sorted(results)
 
 
+_SCOPE = {"run_echo": run_echo, "caller": caller}
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -76,5 +78,5 @@ def _root_concurrent_calls() -> Generator[Any, Any, list[Any]]:
 def test_concurrent_callers_each_receive_correct_reply():
     """Proves that two concurrent callers each receive their own reply, not each other's."""
 
-    results = run(_root_concurrent_calls)
+    results = run(_root_concurrent_calls, scope=_SCOPE)
     assert results == ["hello", "world"]

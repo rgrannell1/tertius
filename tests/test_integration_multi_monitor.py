@@ -2,7 +2,7 @@
 from collections.abc import Generator
 from typing import Any
 
-from tertius.genserver import cast
+from tertius.genserver import mcast
 from tertius.effects import EMonitor, EReceive, ESelf, ESend, ESpawn
 from tertius.exceptions import ProcessCrash
 from tertius.types import CastMsg, Envelope, Pid
@@ -30,7 +30,7 @@ def watch_and_forward(
     # Signal that the monitor is registered before waiting for the crash
     yield ESend(collector, "watching")
     envelope: Envelope = yield EReceive()
-    yield from cast(collector, envelope.body)
+    yield from mcast(collector, envelope.body)
 
 
 # ---------------------------------------------------------------------------
@@ -41,12 +41,12 @@ def watch_and_forward(
 def _root_two_watchers() -> Generator[Any, Any, list[Any]]:
     me: Pid = yield ESelf()
     crasher: Pid = yield ESpawn(
-        fn_name="tests.test_integration_multi_monitor:crash_on_command"
+        fn_name="crash_on_command"
     )
 
     for _ in range(2):
         yield ESpawn(
-            fn_name="tests.test_integration_multi_monitor:watch_and_forward",
+            fn_name="watch_and_forward",
             args=(bytes(crasher), bytes(me)),
         )
 
@@ -57,7 +57,7 @@ def _root_two_watchers() -> Generator[Any, Any, list[Any]]:
         if envelope.body == "watching":
             watching_count += 1
 
-    yield from cast(crasher, "go")
+    yield from mcast(crasher, "go")
 
     results = []
     for _ in range(2):
@@ -69,6 +69,8 @@ def _root_two_watchers() -> Generator[Any, Any, list[Any]]:
     return results
 
 
+_SCOPE = {"crash_on_command": crash_on_command, "watch_and_forward": watch_and_forward}
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -77,7 +79,7 @@ def _root_two_watchers() -> Generator[Any, Any, list[Any]]:
 def test_all_monitors_receive_crash_notification():
     """Proves that every process monitoring a crasher receives a ProcessCrash."""
 
-    results = run(_root_two_watchers)
+    results = run(_root_two_watchers, scope=_SCOPE)
     assert len(results) == 2
     assert all(isinstance(res, ProcessCrash) for res in results)
 
@@ -85,6 +87,6 @@ def test_all_monitors_receive_crash_notification():
 def test_all_crash_notifications_identify_same_pid():
     """Proves that all crash notifications carry the same crashed pid."""
 
-    results = run(_root_two_watchers)
+    results = run(_root_two_watchers, scope=_SCOPE)
     pids = {res.pid for res in results}
     assert len(pids) == 1

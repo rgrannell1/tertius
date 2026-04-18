@@ -5,7 +5,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from orbis import complete
 
-from tertius.genserver import GenServer, call, call_timeout, cast
+from tertius.genserver import GenServer, mcall, mcall_timeout, mcast
 from tertius.effects import EReceive, EReceiveTimeout, ESend
 from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
 
@@ -144,7 +144,7 @@ def test_cast_helper_sends_castmsg():
 
     sent = []
     complete(
-        cast(SENDER, ("inc", 1)),
+        mcast(SENDER, ("inc", 1)),
         send=lambda effect: sent.append(effect.body),
     )
     assert sent == [CastMsg(body=("inc", 1))]
@@ -163,7 +163,7 @@ def test_call_helper_returns_reply_body():
         return Envelope(sender=SENDER, body=ReplyMsg(ref=ref_holder[0], body="pong"))
 
     result = complete(
-        call(SENDER, "ping"),
+        mcall(SENDER, "ping"),
         send=stub_send,
         receive=stub_receive,
     )
@@ -187,7 +187,7 @@ def test_call_helper_ignores_non_matching_replies():
         return Envelope(sender=SENDER, body=ReplyMsg(ref=ref_holder[0], body="right"))
 
     result = complete(
-        call(SENDER, "ping"),
+        mcall(SENDER, "ping"),
         send=stub_send,
         receive=stub_receive,
     )
@@ -207,7 +207,7 @@ def test_call_refs_are_unique():
         return Envelope(sender=SENDER, body=ReplyMsg(ref=refs[-1], body=None))
 
     for _ in range(3):
-        complete(call(SENDER, "ping"), send=stub_send, receive=stub_receive)
+        complete(mcall(SENDER, "ping"), send=stub_send, receive=stub_receive)
 
     assert len(set(refs)) == 3
 
@@ -229,7 +229,7 @@ def test_call_timeout_returns_reply_when_server_responds():
         return Envelope(sender=SENDER, body=ReplyMsg(ref=ref_holder[0], body="pong"))
 
     result = complete(
-        call_timeout(SENDER, "ping", timeout_ms=1000),
+        mcall_timeout(SENDER, "ping", timeout_ms=1000),
         send=stub_send,
         receive_timeout=stub_receive_timeout,
     )
@@ -246,7 +246,7 @@ def test_call_timeout_returns_none_on_timeout():
         return None
 
     result = complete(
-        call_timeout(SENDER, "ping", timeout_ms=50),
+        mcall_timeout(SENDER, "ping", timeout_ms=50),
         send=stub_send,
         receive_timeout=stub_receive_timeout,
     )

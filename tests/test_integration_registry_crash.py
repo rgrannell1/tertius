@@ -25,7 +25,7 @@ def register_then_crash(name: str) -> Generator[Any, Any, None]:
 
 def _root_stale_name(name: str) -> Generator[Any, Any, Pid | None]:
     worker: Pid = yield ESpawn(
-        fn_name="tests.test_integration_registry_crash:register_then_crash",
+        fn_name="register_then_crash",
         args=(name,),
     )
     yield EMonitor(pid=worker)
@@ -40,8 +40,11 @@ def _root_stale_name(name: str) -> Generator[Any, Any, Pid | None]:
 # ---------------------------------------------------------------------------
 
 
+_SCOPE = {"register_then_crash": register_then_crash}
+
+
 def test_whereis_returns_none_after_registered_process_crashes():
     """Proves that EWhereis returns None after the named process has crashed."""
 
-    result = run(_root_stale_name, "doomed-worker")
+    result = run(_root_stale_name, "doomed-worker", scope=_SCOPE)
     assert result is None

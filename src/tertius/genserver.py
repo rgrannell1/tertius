@@ -44,7 +44,7 @@ class GenServer[StateT]:
                     yield ESend(envelope.sender, ReplyMsg(ref=ref, body=reply))
 
 
-def call(pid: Pid, body: Any) -> Generator[ESend | EReceive, None | Envelope, Any]:
+def mcall(pid: Pid, body: Any) -> Generator[ESend | EReceive, None | Envelope, Any]:
     """Synchronous request — sends a CallMsg and blocks until a matching ReplyMsg arrives"""
 
     ref = next(_ref_counter)
@@ -58,7 +58,7 @@ def call(pid: Pid, body: Any) -> Generator[ESend | EReceive, None | Envelope, An
             return envelope.body.body
 
 
-def call_timeout(
+def mcall_timeout(
     pid: Pid, body: Any, timeout_ms: int
 ) -> Generator[ESend | EReceiveTimeout, None | Envelope, Any]:
     """Synchronous request with a deadline — returns the reply body, or None on timeout."""
@@ -77,7 +77,7 @@ def call_timeout(
             return envelope.body.body
 
 
-def cast(pid: Pid, body: Any) -> Generator[ESend, None, None]:
+def mcast(pid: Pid, body: Any) -> Generator[ESend, None, None]:
     """Fire-and-forget — no reply expected."""
 
     yield ESend(pid, CastMsg(body=body))

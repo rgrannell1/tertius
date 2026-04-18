@@ -6,3 +6,4 @@
 - Lint and type-check with `rs lint`
 - No single-letter variable names
 - It is critical to preserve as much type-information as possible, as that's a primary benefit of algebraic effects
+- No mid file imports

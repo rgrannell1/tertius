@@ -1,6 +1,6 @@
 """Integration tests for ERegister / EWhereis — name-based process lookup."""
 
-from tertius.genserver import cast
+from tertius.genserver import mcast
 from collections.abc import Generator
 from typing import Any
 
@@ -22,9 +22,7 @@ def register_and_wait(name: str) -> Generator[Any, Any, None]:
 
     match envelope.body:
         case CastMsg(body=body):
-            yield from __import__("tertius.genserver", fromlist=["cast"]).cast(
-                envelope.sender, body
-            )
+            yield from mcast(envelope.sender, body)
 
 
 # ---------------------------------------------------------------------------
@@ -36,7 +34,7 @@ def _root_whereis_found(name: str) -> Generator[Any, Any, Pid | None]:
     """Spawn a named worker, look it up by name, return the resolved pid."""
 
     yield ESpawn(
-        fn_name="tests.test_integration_registry:register_and_wait",
+        fn_name="register_and_wait",
         args=(name,),
     )
 
@@ -47,10 +45,13 @@ def _root_whereis_found(name: str) -> Generator[Any, Any, Pid | None]:
             return result
 
 
+_SCOPE = {"register_and_wait": register_and_wait}
+
+
 def test_whereis_returns_pid_of_registered_process():
     """Proves that a process registered under a name is findable via EWhereis."""
 
-    result = run(_root_whereis_found, "echo-worker")
+    result = run(_root_whereis_found, "echo-worker", scope=_SCOPE)
     assert isinstance(result, Pid)
 
 
@@ -61,7 +62,7 @@ def _root_whereis_unknown() -> Generator[Any, Any, Pid | None]:
 def test_whereis_returns_none_for_unknown_name():
     """Proves that EWhereis returns None when no process is registered under the name."""
 
-    result = run(_root_whereis_unknown)
+    result = run(_root_whereis_unknown, scope=_SCOPE)
     assert result is None
 
 
@@ -70,7 +71,7 @@ def _root_roundtrip(name: str) -> Generator[Any, Any, Any]:
 
 
     yield ESpawn(
-        fn_name="tests.test_integration_registry:register_and_wait",
+        fn_name="register_and_wait",
         args=(name,),
     )
 
@@ -79,7 +80,7 @@ def _root_roundtrip(name: str) -> Generator[Any, Any, Any]:
         if pid is not None:
             break
 
-    yield from cast(pid, "hello")
+    yield from mcast(pid, "hello")
 
     envelope: Envelope = yield EReceive()
     match envelope.body:
@@ -90,5 +91,5 @@ def _root_roundtrip(name: str) -> Generator[Any, Any, Any]:
 def test_message_via_registered_name_roundtrips():
     """Proves that a message sent to a pid resolved by name arrives & gets a return message."""
 
-    result = run(_root_roundtrip, "echo-worker-2")
+    result = run(_root_roundtrip, "echo-worker-2", scope=_SCOPE)
     assert result == "hello"

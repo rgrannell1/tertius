@@ -9,14 +9,16 @@ from orbis import complete
 from tertius.vm.broker import Broker
 from tertius.vm.process import make_handlers
 
+Scope = dict[str, Callable[..., Any]]
+
 
 class VM:
-    def __init__(self) -> None:
+    def __init__(self, scope: Scope) -> None:
         vm_pid = os.getpid()
         self._broker_addr = f"ipc:///tmp/tertius-{vm_pid}-data.sock"
         self._ctrl_addr = f"ipc:///tmp/tertius-{vm_pid}-ctrl.sock"
         self._ctx: zmq.Context[bytes] = zmq.Context()
-        self._broker = Broker(self._broker_addr, self._ctrl_addr, self._ctx)
+        self._broker = Broker(self._broker_addr, self._ctrl_addr, self._ctx, scope)
 
     def start(self, fn: Callable[..., Any], args: tuple[Any, ...]) -> Any:
         threading.Thread(target=self._broker.run_data, daemon=True).start()
@@ -42,5 +44,5 @@ class VM:
             ctx.term()
 
 
-def run(fn: Callable[..., Any], *args: Any) -> Any:
-    return VM().start(fn, args)
+def run(fn: Callable[..., Any], *args: Any, scope: Scope | None = None) -> Any:
+    return VM(scope or {}).start(fn, args)
