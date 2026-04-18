@@ -1,4 +1,5 @@
 """Integration tests for EKill — broker-initiated process termination."""
+
 from collections.abc import Generator
 from typing import Any
 

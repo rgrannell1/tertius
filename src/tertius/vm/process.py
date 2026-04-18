@@ -8,7 +8,19 @@ import zmq
 from orbis import complete
 
 from tertius.constants import READY
-from tertius.effects import EEmit, EKill, ELink, EMonitor, EReceive, EReceiveTimeout, ERegister, ESelf, ESend, ESpawn, EWhereis
+from tertius.effects import (
+    EEmit,
+    EKill,
+    ELink,
+    EMonitor,
+    EReceive,
+    EReceiveTimeout,
+    ERegister,
+    ESelf,
+    ESend,
+    ESpawn,
+    EWhereis,
+)
 from tertius.exceptions import LinkedCrash
 from tertius.types import Envelope, Pid
 from tertius.vm.messages import (

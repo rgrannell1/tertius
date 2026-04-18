@@ -1,4 +1,5 @@
 """Integration tests for GenServer over real ZMQ processes."""
+
 from collections.abc import Generator
 from typing import Any
 

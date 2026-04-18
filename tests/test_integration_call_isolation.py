@@ -1,4 +1,5 @@
 """Integration tests for call() ref isolation under concurrent callers."""
+
 from collections.abc import Generator
 from typing import Any
 

@@ -1,4 +1,5 @@
 """Integration tests for EReceiveTimeout."""
+
 import time
 from collections.abc import Generator
 from typing import Any
@@ -14,7 +15,9 @@ from tertius.vm import run
 # ---------------------------------------------------------------------------
 
 
-def send_after_delay(target_pid_bytes: bytes, delay_ms: int, body: Any) -> Generator[Any, Any, None]:
+def send_after_delay(
+    target_pid_bytes: bytes, delay_ms: int, body: Any
+) -> Generator[Any, Any, None]:
     """Sleep then send a message. Uses a busy-wait to avoid importing time in generator."""
 
     time.sleep(delay_ms / 1000)

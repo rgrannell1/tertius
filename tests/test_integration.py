@@ -1,4 +1,5 @@
 """Integration test: three processes each run marco polo and report to a collector."""
+
 from collections.abc import Generator
 from typing import Any
 

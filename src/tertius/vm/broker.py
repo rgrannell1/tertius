@@ -6,7 +6,18 @@ from typing import Any
 
 import zmq
 
-from tertius.constants import CRASH, EMIT, KILL, LINK, MONITOR, OK, READY, REGISTER, SPAWN, WHEREIS
+from tertius.constants import (
+    CRASH,
+    EMIT,
+    KILL,
+    LINK,
+    MONITOR,
+    OK,
+    READY,
+    REGISTER,
+    SPAWN,
+    WHEREIS,
+)
 from tertius.exceptions import LinkedCrash, ProcessCrash
 from tertius.types import Pid
 from tertius.vm.messages import (
@@ -72,11 +83,20 @@ class Broker:
         """Spawn a new process and wait for it to signal readiness before returning its pid."""
         fn_name, args = decode_spawn(frames)
         if fn_name not in self._scope:
-            raise KeyError(f"ESpawn: {fn_name!r} not in scope; available: {sorted(self._scope)}")
+            raise KeyError(
+                f"ESpawn: {fn_name!r} not in scope; available: {sorted(self._scope)}"
+            )
         new_pid = self.alloc_pid()
         proc = multiprocessing.Process(
             target=process_entry,
-            args=(new_pid.id, self._broker_addr, self._ctrl_addr, fn_name, args, self._scope),
+            args=(
+                new_pid.id,
+                self._broker_addr,
+                self._ctrl_addr,
+                fn_name,
+                args,
+                self._scope,
+            ),
             daemon=True,
         )
         proc.start()
@@ -110,7 +130,11 @@ class Broker:
         router.send_multipart([requester] + encode_whereis_reply(pid))
 
     def _handle_link(
-        self, router: "zmq.Socket[bytes]", requester: bytes, frames: list[bytes], notifier: "zmq.Socket[bytes]"
+        self,
+        router: "zmq.Socket[bytes]",
+        requester: bytes,
+        frames: list[bytes],
+        notifier: "zmq.Socket[bytes]",
     ) -> None:
         """Register a bidirectional link; immediately kill requester if target is already dead."""
         requester_pid = Pid.from_bytes(requester)
@@ -118,13 +142,19 @@ class Broker:
         router.send_multipart([requester, OK])
         if target_pid in self._dead:
             kill_msg = LinkedCrash(pid=target_pid, reason=self._dead[target_pid])
-            notifier.send_multipart(encode_linked_crash_notification(requester_pid, target_pid, kill_msg))
+            notifier.send_multipart(
+                encode_linked_crash_notification(requester_pid, target_pid, kill_msg)
+            )
             return
         self._links.setdefault(requester_pid, []).append(target_pid)
         self._links.setdefault(target_pid, []).append(requester_pid)
 
     def _handle_monitor(
-        self, router: "zmq.Socket[bytes]", requester: bytes, frames: list[bytes], notifier: "zmq.Socket[bytes]"
+        self,
+        router: "zmq.Socket[bytes]",
+        requester: bytes,
+        frames: list[bytes],
+        notifier: "zmq.Socket[bytes]",
     ) -> None:
         """Monitor a process for crashes; immediately notify if target is already dead."""
         target_pid = decode_monitor(frames)
@@ -132,7 +162,9 @@ class Broker:
         router.send_multipart([requester, OK])
         if target_pid in self._dead:
             crash_msg = ProcessCrash(pid=target_pid, reason=self._dead[target_pid])
-            notifier.send_multipart(encode_crash_notification(requester_pid, target_pid, crash_msg))
+            notifier.send_multipart(
+                encode_crash_notification(requester_pid, target_pid, crash_msg)
+            )
             return
         self._monitors.setdefault(target_pid, []).append(requester_pid)
 
@@ -154,7 +186,9 @@ class Broker:
     ) -> None:
         """Notify monitors and linked peers of a crashed process, then clean up state."""
         self._dead[pid] = reason
-        self._names = {name: owner for name, owner in self._names.items() if owner != pid}
+        self._names = {
+            name: owner for name, owner in self._names.items() if owner != pid
+        }
 
         crash_msg = ProcessCrash(pid=pid, reason=reason)
         for watcher in self._monitors.pop(pid, []):
@@ -163,8 +197,12 @@ class Broker:
         kill_msg = LinkedCrash(pid=pid, reason=reason)
         for peer in self._links.pop(pid, []):
             if peer in self._links:
-                self._links[peer] = [linked for linked in self._links[peer] if linked != pid]
-            notifier.send_multipart(encode_linked_crash_notification(peer, pid, kill_msg))
+                self._links[peer] = [
+                    linked for linked in self._links[peer] if linked != pid
+                ]
+            notifier.send_multipart(
+                encode_linked_crash_notification(peer, pid, kill_msg)
+            )
 
     def _handle_kill(
         self,

@@ -14,6 +14,7 @@ from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
 # A minimal Counter GenServer used across all tests
 # ---------------------------------------------------------------------------
 
+
 class Counter(GenServer[int]):
     def init(self, initial: int = 0) -> int:
         return initial
@@ -26,7 +27,9 @@ class Counter(GenServer[int]):
                 return state
         yield
 
-    def handle_call(self, state: int, body: Any) -> Generator[Any, Any, tuple[int, Any]]:
+    def handle_call(
+        self, state: int, body: Any
+    ) -> Generator[Any, Any, tuple[int, Any]]:
         match body:
             case "get":
                 return state, state
@@ -65,6 +68,7 @@ def drive(server: GenServer, initial: Any, messages: list[Any]) -> list[Any]:
 # Initialisation
 # ---------------------------------------------------------------------------
 
+
 def test_init_sets_initial_state():
     """Proves that State from a get call immediately after init equals the initial value."""
 
@@ -76,14 +80,19 @@ def test_init_sets_initial_state():
 # handle_cast
 # ---------------------------------------------------------------------------
 
+
 @given(st.integers(min_value=0, max_value=1000))
 def test_single_increment(n):
     """Proves that increment message cast updates state by the correct amount."""
 
-    sent = drive(Counter(), 0, [
-        CastMsg(body=("inc", n)),
-        CallMsg(ref=0, body="get"),
-    ])
+    sent = drive(
+        Counter(),
+        0,
+        [
+            CastMsg(body=("inc", n)),
+            CallMsg(ref=0, body="get"),
+        ],
+    )
     assert sent == [ReplyMsg(ref=0, body=n)]
 
 
@@ -91,7 +100,9 @@ def test_single_increment(n):
 def test_increments_accumulate(increments):
     """Proves that State after N increments equals the sum of all increments."""
 
-    messages = [CastMsg(body=("inc", n)) for n in increments] + [CallMsg(ref=0, body="get")]
+    messages = [CastMsg(body=("inc", n)) for n in increments] + [
+        CallMsg(ref=0, body="get")
+    ]
     sent = drive(Counter(), 0, messages)
     assert sent == [ReplyMsg(ref=0, body=sum(increments))]
 
@@ -99,16 +110,21 @@ def test_increments_accumulate(increments):
 def test_unknown_cast_leaves_state_unchanged():
     """Proves that an unrecognised cast body does not change state."""
 
-    sent = drive(Counter(), 7, [
-        CastMsg(body="unknown"),
-        CallMsg(ref=0, body="get"),
-    ])
+    sent = drive(
+        Counter(),
+        7,
+        [
+            CastMsg(body="unknown"),
+            CallMsg(ref=0, body="get"),
+        ],
+    )
     assert sent == [ReplyMsg(ref=0, body=7)]
 
 
 # ---------------------------------------------------------------------------
 # handle_call
 # ---------------------------------------------------------------------------
+
 
 def test_call_reply_matches_state():
     """Proves that the reply from a get call equals the current state."""
@@ -128,16 +144,21 @@ def test_call_ref_is_preserved():
 def test_state_unchanged_after_call():
     """Proves two gets are idempotent"""
 
-    sent = drive(Counter(), 3, [
-        CallMsg(ref=0, body="get"),
-        CallMsg(ref=1, body="get"),
-    ])
+    sent = drive(
+        Counter(),
+        3,
+        [
+            CallMsg(ref=0, body="get"),
+            CallMsg(ref=1, body="get"),
+        ],
+    )
     assert sent[0].body == sent[1].body == 3
 
 
 # ---------------------------------------------------------------------------
 # call() and cast() helpers
 # ---------------------------------------------------------------------------
+
 
 def test_cast_helper_sends_castmsg():
     """Proves that cast() yields an ESend wrapping a CastMsg."""
@@ -183,7 +204,9 @@ def test_call_helper_ignores_non_matching_replies():
         nonlocal call_count
         call_count += 1
         if call_count == 1:
-            return Envelope(sender=SENDER, body=ReplyMsg(ref=ref_holder[0] + 1, body="wrong"))
+            return Envelope(
+                sender=SENDER, body=ReplyMsg(ref=ref_holder[0] + 1, body="wrong")
+            )
         return Envelope(sender=SENDER, body=ReplyMsg(ref=ref_holder[0], body="right"))
 
     result = complete(

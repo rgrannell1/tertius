@@ -38,16 +38,22 @@ class GenServer[StateT]:
             match envelope.body:
                 case CastMsg(body=body):
                     result = self.handle_cast(state, body)
-                    state = (yield from result) if inspect.isgenerator(result) else result
+                    state = (
+                        (yield from result) if inspect.isgenerator(result) else result
+                    )
 
                 case CallMsg(ref=ref, body=body):
                     result = self.handle_call(state, body)
-                    state, reply = (yield from result) if inspect.isgenerator(result) else result
+                    state, reply = (
+                        (yield from result) if inspect.isgenerator(result) else result
+                    )
                     yield ESend(envelope.sender, ReplyMsg(ref=ref, body=reply))
 
                 case _:
                     result = self.handle_info(state, envelope.body)
-                    state = (yield from result) if inspect.isgenerator(result) else result
+                    state = (
+                        (yield from result) if inspect.isgenerator(result) else result
+                    )
 
 
 def mcall(pid: Pid, body: Any) -> Generator[ESend | EReceive, None | Envelope, Any]:

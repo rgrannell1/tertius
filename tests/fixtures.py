@@ -1,4 +1,5 @@
 """Module-level process functions resolvable via tertius scope."""
+
 from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Any, ClassVar

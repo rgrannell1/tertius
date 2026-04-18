@@ -1,4 +1,5 @@
 """Integration tests for GenServer.handle_info — non-call/cast message handling."""
+
 from collections.abc import Generator
 from typing import Any
 

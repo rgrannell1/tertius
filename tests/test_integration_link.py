@@ -1,8 +1,17 @@
 """Integration tests for ELink — bidirectional crash propagation."""
+
 from collections.abc import Generator
 from typing import Any
 
-from tertius.effects import EEmit, ELink, EMonitor, EReceive, EReceiveTimeout, ESpawn, ESelf
+from tertius.effects import (
+    EEmit,
+    ELink,
+    EMonitor,
+    EReceive,
+    EReceiveTimeout,
+    ESpawn,
+    ESelf,
+)
 from tertius.exceptions import ProcessCrash
 from tertius.types import Envelope, Pid
 from tertius.vm import run

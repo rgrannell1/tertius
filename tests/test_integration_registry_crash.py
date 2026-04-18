@@ -1,4 +1,5 @@
 """Integration tests for name registry cleanup after process crash."""
+
 from collections.abc import Generator
 from typing import Any
 

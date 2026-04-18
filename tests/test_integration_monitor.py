@@ -1,4 +1,5 @@
 """Integration tests for EMonitor — crash notification delivery."""
+
 from collections.abc import Generator
 from typing import Any
 

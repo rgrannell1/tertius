@@ -1,4 +1,5 @@
 """Integration tests for multiple monitors on a single process."""
+
 from collections.abc import Generator
 from typing import Any
 
@@ -40,9 +41,7 @@ def watch_and_forward(
 
 def _root_two_watchers() -> Generator[Any, Any, None]:
     me: Pid = yield ESelf()
-    crasher: Pid = yield ESpawn(
-        fn_name="crash_on_command"
-    )
+    crasher: Pid = yield ESpawn(fn_name="crash_on_command")
 
     for _ in range(2):
         yield ESpawn(

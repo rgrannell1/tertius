@@ -22,7 +22,9 @@ class VM:
         self._ctx: zmq.Context[bytes] = zmq.Context()
         self._broker = Broker(self._broker_addr, self._ctrl_addr, self._ctx, scope)
 
-    def start(self, fn: Callable[..., Any], args: tuple[Any, ...]) -> Generator[Any, None, None]:
+    def start(
+        self, fn: Callable[..., Any], args: tuple[Any, ...]
+    ) -> Generator[Any, None, None]:
         threading.Thread(target=self._broker.run_data, daemon=True).start()
         threading.Thread(target=self._broker.run_control, daemon=True).start()
         self._broker.ready.wait()
@@ -56,5 +58,7 @@ class VM:
             yield event
 
 
-def run(fn: Callable[..., Any], *args: Any, scope: Scope | None = None) -> Generator[Any, None, None]:
+def run(
+    fn: Callable[..., Any], *args: Any, scope: Scope | None = None
+) -> Generator[Any, None, None]:
     yield from VM(scope or {}).start(fn, args)

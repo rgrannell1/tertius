@@ -15,10 +15,21 @@ from tertius import EReceive, ESpawn, ESelf, mcast, run
 from tertius.types import CastMsg, Envelope, Pid
 
 # some example data
-PHOTOS = [f"photos/{name}.jpg" for name in [
-    "beach", "mountain", "forest", "city", "desert",
-    "river", "canyon", "glacier", "savanna", "tundra",
-]]
+PHOTOS = [
+    f"photos/{name}.jpg"
+    for name in [
+        "beach",
+        "mountain",
+        "forest",
+        "city",
+        "desert",
+        "river",
+        "canyon",
+        "glacier",
+        "savanna",
+        "tundra",
+    ]
+]
 N_WORKERS = 3
 
 MSG_PROCESS = "process"
@@ -27,9 +38,11 @@ MSG_STOP = "stop"
 
 # -------- Process-Local Orbis Effects -------- #
 
+
 @dataclass
 class EEncode(Effect[bytes]):
     """Encode the image at path, returning the encoded bytes."""
+
     tag: ClassVar[str] = "encode"
     path: str
 
@@ -37,12 +50,14 @@ class EEncode(Effect[bytes]):
 @dataclass
 class EWriteDB(Event):
     """Write encoded image bytes to the database."""
+
     tag: ClassVar[str] = "write_db"
     path: str
     data: bytes
 
 
 # -------- Stub Handlers -------- #
+
 
 def handle_encode(effect: EEncode) -> bytes:
     return f"<encoded:{effect.path}>".encode()
@@ -53,6 +68,7 @@ def handle_write_db(effect: EWriteDB) -> None:
 
 
 # -------- An example worker Orbis task -------- #
+
 
 def process_photo(path: str) -> Generator[EEncode | EWriteDB, bytes | None, None]:
     data: bytes = yield EEncode(path)
