@@ -8,7 +8,7 @@ import zmq
 from orbis import complete
 
 from tertius.constants import READY
-from tertius.effects import ELink, EMonitor, EReceive, EReceiveTimeout, ERegister, ESelf, ESend, ESpawn, EWhereis
+from tertius.effects import EKill, ELink, EMonitor, EReceive, EReceiveTimeout, ERegister, ESelf, ESend, ESpawn, EWhereis
 from tertius.exceptions import LinkedCrash
 from tertius.types import Envelope, Pid
 from tertius.vm.messages import (
@@ -17,6 +17,7 @@ from tertius.vm.messages import (
     decode_whereis_reply,
     encode_crash,
     encode_envelope,
+    encode_kill,
     encode_link,
     encode_monitor,
     encode_register,
@@ -92,6 +93,13 @@ def _handle_monitor(ctrl: "zmq.Socket[bytes]", effect: EMonitor) -> None:
     ctrl.recv_multipart()
 
 
+def _handle_kill(ctrl: "zmq.Socket[bytes]", effect: EKill) -> None:
+    """Handle the EKill effect; terminate a process via the broker"""
+
+    ctrl.send_multipart(encode_kill(effect.pid))
+    ctrl.recv_multipart()
+
+
 def make_handlers(
     pid: Pid,
     dealer: "zmq.Socket[bytes]",
@@ -109,6 +117,7 @@ def make_handlers(
         "register": partial(_handle_register, ctrl),
         "whereis": partial(_handle_whereis, ctrl),
         "monitor": partial(_handle_monitor, ctrl),
+        "kill": partial(_handle_kill, ctrl),
     }
 
 

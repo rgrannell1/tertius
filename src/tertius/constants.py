@@ -1,4 +1,5 @@
 SPAWN = b"spawn"
+KILL = b"kill"
 LINK = b"link"
 REGISTER = b"register"
 WHEREIS = b"whereis"

@@ -76,3 +76,11 @@ class EReceiveTimeout(Effect[Envelope | None]):
 
     tag: ClassVar[str] = "receive_timeout"
     timeout_ms: int
+
+
+@dataclass
+class EKill(Event):
+    """Terminate a process — delivers ProcessCrash to its monitors."""
+
+    tag: ClassVar[str] = "kill"
+    pid: Pid
