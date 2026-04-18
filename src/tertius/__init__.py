@@ -1,14 +1,16 @@
 from tertius.genserver import GenServer, mcall, mcall_timeout, mcast
-from tertius.effects import EMonitor, EReceive, EReceiveTimeout, ERegister, ESelf, ESend, ESpawn, EWhereis
-from tertius.exceptions import DeadProcess, ProcessCrash, TertiusError
+from tertius.effects import ELink, EMonitor, EReceive, EReceiveTimeout, ERegister, ESelf, ESend, ESpawn, EWhereis
+from tertius.exceptions import DeadProcess, LinkedCrash, ProcessCrash, TertiusError
 from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
-from tertius.vm import run
+from tertius.vm import Scope, run
 
 __all__ = [
     "CallMsg",
     "CastMsg",
     "DeadProcess",
+    "LinkedCrash",
     "Envelope",
+    "ELink",
     "EMonitor",
     "EReceive",
     "EReceiveTimeout",
@@ -21,6 +23,7 @@ __all__ = [
     "Pid",
     "ProcessCrash",
     "ReplyMsg",
+    "Scope",
     "TertiusError",
     "mcall",
     "mcall_timeout",

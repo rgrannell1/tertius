@@ -8,7 +8,8 @@ import zmq
 from orbis import complete
 
 from tertius.constants import READY
-from tertius.effects import EMonitor, EReceive, EReceiveTimeout, ERegister, ESelf, ESend, ESpawn, EWhereis
+from tertius.effects import ELink, EMonitor, EReceive, EReceiveTimeout, ERegister, ESelf, ESend, ESpawn, EWhereis
+from tertius.exceptions import LinkedCrash
 from tertius.types import Envelope, Pid
 from tertius.vm.messages import (
     decode_pid_reply,
@@ -16,6 +17,7 @@ from tertius.vm.messages import (
     decode_whereis_reply,
     encode_crash,
     encode_envelope,
+    encode_link,
     encode_monitor,
     encode_register,
     encode_spawn,
@@ -39,9 +41,18 @@ def _handle_send(dealer: "zmq.Socket[bytes]", pid: Pid, effect: ESend) -> None:
     dealer.send_multipart(encode_envelope(effect.pid, pid, effect.body))
 
 
+def _handle_link(ctrl: "zmq.Socket[bytes]", effect: ELink) -> None:
+    """Handle the ELink effect; register a bidirectional link with another process"""
+    ctrl.send_multipart(encode_link(effect.pid))
+    ctrl.recv_multipart()
+
+
 def _handle_receive(dealer: "zmq.Socket[bytes]", _effect: EReceive) -> Envelope:
     """Handle the EReceive effect; receive a message from a process"""
-    return decode_received_envelope(dealer.recv_multipart())
+    envelope = decode_received_envelope(dealer.recv_multipart())
+    if isinstance(envelope.body, LinkedCrash):
+        raise envelope.body
+    return envelope
 
 
 def _handle_register(ctrl: "zmq.Socket[bytes]", effect: ERegister) -> None:
@@ -68,7 +79,10 @@ def _handle_receive_timeout(
     if dealer not in ready:
         return None
 
-    return decode_received_envelope(dealer.recv_multipart())
+    envelope = decode_received_envelope(dealer.recv_multipart())
+    if isinstance(envelope.body, LinkedCrash):
+        raise envelope.body
+    return envelope
 
 
 def _handle_monitor(ctrl: "zmq.Socket[bytes]", effect: EMonitor) -> None:
@@ -91,6 +105,7 @@ def make_handlers(
         "send": partial(_handle_send, dealer, pid),
         "receive": partial(_handle_receive, dealer),
         "receive_timeout": partial(_handle_receive_timeout, dealer),
+        "link": partial(_handle_link, ctrl),
         "register": partial(_handle_register, ctrl),
         "whereis": partial(_handle_whereis, ctrl),
         "monitor": partial(_handle_monitor, ctrl),

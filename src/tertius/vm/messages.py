@@ -22,8 +22,8 @@ The frames we pass have the layout (ROUTER-received):
 import pickle
 from typing import Any
 
-from tertius.constants import CRASH, MONITOR, REGISTER, SPAWN, WHEREIS
-from tertius.exceptions import ProcessCrash
+from tertius.constants import CRASH, LINK, MONITOR, REGISTER, SPAWN, WHEREIS
+from tertius.exceptions import LinkedCrash, ProcessCrash
 from tertius.types import Envelope, Pid
 
 # Frame Accessors
@@ -62,6 +62,14 @@ def encode_crash_notification(
     target: Pid, sender: Pid, crash: ProcessCrash
 ) -> list[bytes]:
     """Encode a crash notification as sent by a DEALER."""
+
+    return [bytes(target), bytes(sender), pickle.dumps(crash)]
+
+
+def encode_linked_crash_notification(
+    target: Pid, sender: Pid, crash: LinkedCrash
+) -> list[bytes]:
+    """Encode a linked-crash kill signal as sent by a DEALER."""
 
     return [bytes(target), bytes(sender), pickle.dumps(crash)]
 
@@ -106,6 +114,18 @@ def decode_whereis(frames: list[bytes]) -> str:
     """Decode a whereis request as received by a DEALER."""
 
     return frame_payload(frames)[0].decode()
+
+
+def encode_link(target: Pid) -> list[bytes]:
+    """Encode a link request as sent by a DEALER."""
+
+    return [LINK, bytes(target)]
+
+
+def decode_link(frames: list[bytes]) -> Pid:
+    """Decode a link request as received by a DEALER."""
+
+    return Pid.from_bytes(frame_payload(frames)[0])
 
 
 def encode_monitor(target: Pid) -> list[bytes]:

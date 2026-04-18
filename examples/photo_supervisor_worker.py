@@ -21,6 +21,10 @@ PHOTOS = [f"photos/{name}.jpg" for name in [
 ]]
 N_WORKERS = 3
 
+MSG_PROCESS = "process"
+MSG_DONE = "done"
+MSG_STOP = "stop"
+
 # -------- Process-Local Orbis Effects -------- #
 
 @dataclass
@@ -67,14 +71,14 @@ def worker(supervisor_pid_bytes: bytes) -> Generator[Any, Any, None]:
         envelope: Envelope = yield EReceive()
 
         match envelope.body:
-            case CastMsg(body=("process", path)):
+            case CastMsg(body=(MSG_PROCESS, path)):
                 yield from handle(
                     process_photo(path),
                     encode=handle_encode,
                     write_db=handle_write_db,
                 )
-                yield from mcast(supervisor, ("done", path))
-            case CastMsg(body="stop"):
+                yield from mcast(supervisor, (MSG_DONE, path))
+            case CastMsg(body=MSG_STOP):
                 return
 
 
@@ -95,17 +99,17 @@ def supervisor() -> Generator[Any, Any, None]:
     print(f"spawned {N_WORKERS} workers, distributing {len(PHOTOS)} photos")
 
     for idx, path in enumerate(PHOTOS):
-        yield from mcast(pool[idx % N_WORKERS], ("process", path))
+        yield from mcast(pool[idx % N_WORKERS], (MSG_PROCESS, path))
 
     for _ in PHOTOS:
         envelope: Envelope = yield EReceive()
 
         match envelope.body:
-            case CastMsg(body=("done", path)):
+            case CastMsg(body=(MSG_DONE, path)):
                 print(f"  ✓ {path}")
 
     for pid in pool:
-        yield from mcast(pid, "stop")
+        yield from mcast(pid, MSG_STOP)
 
 
 if __name__ == "__main__":

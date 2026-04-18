@@ -11,9 +11,7 @@ class ESpawn(Effect[Pid]):
     """Spawn a new process"""
 
     tag: ClassVar[str] = "spawn"
-    # Since we're in a multiprocessing environment, functions need to be looked up by name
     fn_name: str
-    # Arguments to pass to the function
     args: tuple[Any, ...] = field(default_factory=tuple)
 
 
@@ -29,9 +27,7 @@ class ESend[BodyT](Event):
     """Send a message to a process"""
 
     tag: ClassVar[str] = "send"
-    # The process to send the message to
     pid: Pid
-    # The message to send
     body: BodyT
 
 
@@ -56,6 +52,14 @@ class EWhereis(Effect[Pid | None]):
 
     tag: ClassVar[str] = "whereis"
     name: str
+
+
+@dataclass
+class ELink(Event):
+    """Bidirectionally link to a process — if either crashes, the other dies too"""
+
+    tag: ClassVar[str] = "link"
+    pid: Pid
 
 
 @dataclass

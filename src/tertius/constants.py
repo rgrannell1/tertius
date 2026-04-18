@@ -1,4 +1,5 @@
 SPAWN = b"spawn"
+LINK = b"link"
 REGISTER = b"register"
 WHEREIS = b"whereis"
 MONITOR = b"monitor"

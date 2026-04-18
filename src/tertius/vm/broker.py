@@ -5,16 +5,18 @@ from typing import Any
 
 import zmq
 
-from tertius.constants import CRASH, MONITOR, OK, READY, REGISTER, SPAWN, WHEREIS
-from tertius.exceptions import ProcessCrash
+from tertius.constants import CRASH, LINK, MONITOR, OK, READY, REGISTER, SPAWN, WHEREIS
+from tertius.exceptions import LinkedCrash, ProcessCrash
 from tertius.types import Pid
 from tertius.vm.messages import (
     decode_crash,
+    decode_link,
     decode_monitor,
     decode_register,
     decode_spawn,
     decode_whereis,
     encode_crash_notification,
+    encode_linked_crash_notification,
     encode_pid_reply,
     encode_whereis_reply,
 )
@@ -35,6 +37,8 @@ class Broker:
         self._pid_lock = threading.Lock()
         self._names: dict[str, Pid] = {}
         self._monitors: dict[Pid, list[Pid]] = {}
+        self._links: dict[Pid, list[Pid]] = {}
+        self._dead: dict[Pid, Exception] = {}
         self._procs: list[multiprocessing.Process] = []
         self.ready = threading.Event()
 
@@ -101,6 +105,20 @@ class Broker:
         pid = self._names.get(decode_whereis(frames))
         router.send_multipart([requester] + encode_whereis_reply(pid))
 
+    def _handle_link(
+        self, router: "zmq.Socket[bytes]", requester: bytes, frames: list[bytes], notifier: "zmq.Socket[bytes]"
+    ) -> None:
+        """Register a bidirectional link; immediately kill requester if target is already dead."""
+        requester_pid = Pid.from_bytes(requester)
+        target_pid = decode_link(frames)
+        router.send_multipart([requester, OK])
+        if target_pid in self._dead:
+            kill_msg = LinkedCrash(pid=target_pid, reason=self._dead[target_pid])
+            notifier.send_multipart(encode_linked_crash_notification(requester_pid, target_pid, kill_msg))
+            return
+        self._links.setdefault(requester_pid, []).append(target_pid)
+        self._links.setdefault(target_pid, []).append(requester_pid)
+
     def _handle_monitor(
         self, router: "zmq.Socket[bytes]", requester: bytes, frames: list[bytes]
     ) -> None:
@@ -119,14 +137,20 @@ class Broker:
         """Deliver a ProcessCrash message to all monitors of the crashed process."""
         crashed_pid = Pid.from_bytes(requester)
         reason = decode_crash(frames)
+        self._dead[crashed_pid] = reason
         watchers = self._monitors.pop(crashed_pid, [])
+        linked = self._links.pop(crashed_pid, [])
         self._names = {k: v for k, v in self._names.items() if v != crashed_pid}
-        crash_msg = ProcessCrash(pid=crashed_pid, reason=reason)
 
+        crash_msg = ProcessCrash(pid=crashed_pid, reason=reason)
         for watcher in watchers:
-            notifier.send_multipart(
-                encode_crash_notification(watcher, crashed_pid, crash_msg)
-            )
+            notifier.send_multipart(encode_crash_notification(watcher, crashed_pid, crash_msg))
+
+        kill_msg = LinkedCrash(pid=crashed_pid, reason=reason)
+        for peer in linked:
+            if peer in self._links:
+                self._links[peer] = [p for p in self._links[peer] if p != crashed_pid]
+            notifier.send_multipart(encode_linked_crash_notification(peer, crashed_pid, kill_msg))
 
         router.send_multipart([requester, OK])
 
@@ -145,6 +169,9 @@ class Broker:
         handlers = {
             SPAWN: lambda router, requester, frames: self._handle_spawn(
                 router, requester, frames, handlers
+            ),
+            LINK: lambda router, requester, frames: self._handle_link(
+                router, requester, frames, notifier
             ),
             REGISTER: lambda router, requester, frames: self._handle_register(
                 router, requester, frames

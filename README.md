@@ -9,13 +9,14 @@ An effects-based multiprocessing runtime for Python, inspired by Erlang. Tertius
 
 | Effect | Description |
 |---|---|
-| `ESpawn(fn_name, args)` | Spawn a new OS process; blocks until it is ready |
+| `ESpawn(fn_name, args)` | Spawn a new OS process by scope key; blocks until it is ready |
 | `ESelf()` | Return the current process pid |
 | `ESend(pid, body)` | Send a message to another process |
 | `EReceive()` | Block until a message arrives |
 | `EReceiveTimeout(timeout_ms)` | Receive a message or `None` on timeout |
 | `ERegister(name)` | Register the current process under a name |
 | `EWhereis(name)` | Look up a pid by name; returns `None` if not found |
+| `ELink(pid)` | Bidirectionally link to a process — if either crashes, the other dies too |
 | `EMonitor(pid)` | Receive a `ProcessCrash` if the target process crashes |
 
 ## Build
