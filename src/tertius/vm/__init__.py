@@ -1,6 +1,6 @@
 import os
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from typing import Any
 
 import zmq
@@ -11,6 +11,8 @@ from tertius.vm.process import make_handlers
 
 Scope = dict[str, Callable[..., Any]]
 
+_DONE = object()
+
 
 class VM:
     def __init__(self, scope: Scope) -> None:
@@ -20,7 +22,7 @@ class VM:
         self._ctx: zmq.Context[bytes] = zmq.Context()
         self._broker = Broker(self._broker_addr, self._ctrl_addr, self._ctx, scope)
 
-    def start(self, fn: Callable[..., Any], args: tuple[Any, ...]) -> Any:
+    def start(self, fn: Callable[..., Any], args: tuple[Any, ...]) -> Generator[Any, None, None]:
         threading.Thread(target=self._broker.run_data, daemon=True).start()
         threading.Thread(target=self._broker.run_control, daemon=True).start()
         self._broker.ready.wait()
@@ -36,13 +38,23 @@ class VM:
         ctrl.identity = bytes(root_pid)
         ctrl.connect(self._ctrl_addr)
 
-        try:
-            return complete(fn(*args), **make_handlers(root_pid, dealer, ctrl))
-        finally:
-            dealer.close()
-            ctrl.close()
-            ctx.term()
+        def root_thread() -> None:
+            try:
+                complete(fn(*args), **make_handlers(root_pid, dealer, ctrl))
+            finally:
+                dealer.close()
+                ctrl.close()
+                ctx.term()
+                self._broker.emit_queue.put(_DONE)
+
+        threading.Thread(target=root_thread, daemon=True).start()
+
+        while True:
+            event = self._broker.emit_queue.get()
+            if event is _DONE:
+                return
+            yield event
 
 
-def run(fn: Callable[..., Any], *args: Any, scope: Scope | None = None) -> Any:
-    return VM(scope or {}).start(fn, args)
+def run(fn: Callable[..., Any], *args: Any, scope: Scope | None = None) -> Generator[Any, None, None]:
+    yield from VM(scope or {}).start(fn, args)

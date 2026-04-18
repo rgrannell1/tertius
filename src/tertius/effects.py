@@ -79,6 +79,14 @@ class EReceiveTimeout(Effect[Envelope | None]):
 
 
 @dataclass
+class EEmit[BodyT](Event):
+    """Emit an event to the caller of run()."""
+
+    tag: ClassVar[str] = "emit"
+    body: BodyT
+
+
+@dataclass
 class EKill(Event):
     """Terminate a process — delivers ProcessCrash to its monitors."""
 

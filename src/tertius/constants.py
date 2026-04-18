@@ -1,4 +1,5 @@
 SPAWN = b"spawn"
+EMIT = b"emit"
 KILL = b"kill"
 LINK = b"link"
 REGISTER = b"register"

@@ -22,7 +22,7 @@ The frames we pass have the layout (ROUTER-received):
 import pickle
 from typing import Any
 
-from tertius.constants import CRASH, KILL, LINK, MONITOR, REGISTER, SPAWN, WHEREIS
+from tertius.constants import CRASH, EMIT, KILL, LINK, MONITOR, REGISTER, SPAWN, WHEREIS
 from tertius.exceptions import LinkedCrash, ProcessCrash
 from tertius.types import Envelope, Pid
 
@@ -138,6 +138,18 @@ def decode_monitor(frames: list[bytes]) -> Pid:
     """Decode a monitor request as received by a DEALER."""
 
     return Pid.from_bytes(frame_payload(frames)[0])
+
+
+def encode_emit(body: Any) -> list[bytes]:
+    """Encode an emit request as sent by a DEALER."""
+
+    return [EMIT, pickle.dumps(body)]
+
+
+def decode_emit(frames: list[bytes]) -> Any:
+    """Decode an emit request as received by a DEALER."""
+
+    return pickle.loads(frame_payload(frames)[0])
 
 
 def encode_kill(target: Pid) -> list[bytes]:

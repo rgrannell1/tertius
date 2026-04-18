@@ -1,15 +1,17 @@
 import multiprocessing
+import queue
 import threading
 from collections.abc import Callable
 from typing import Any
 
 import zmq
 
-from tertius.constants import CRASH, KILL, LINK, MONITOR, OK, READY, REGISTER, SPAWN, WHEREIS
+from tertius.constants import CRASH, EMIT, KILL, LINK, MONITOR, OK, READY, REGISTER, SPAWN, WHEREIS
 from tertius.exceptions import LinkedCrash, ProcessCrash
 from tertius.types import Pid
 from tertius.vm.messages import (
     decode_crash,
+    decode_emit,
     decode_kill,
     decode_link,
     decode_monitor,
@@ -41,6 +43,7 @@ class Broker:
         self._links: dict[Pid, list[Pid]] = {}
         self._dead: dict[Pid, Exception] = {}
         self._procs: dict[Pid, multiprocessing.Process] = {}
+        self.emit_queue: queue.Queue = queue.Queue()
         self.ready = threading.Event()
 
     def alloc_pid(self) -> Pid:
@@ -133,6 +136,13 @@ class Broker:
             return
         self._monitors.setdefault(target_pid, []).append(requester_pid)
 
+    def _handle_emit(
+        self, router: "zmq.Socket[bytes]", requester: bytes, frames: list[bytes]
+    ) -> None:
+        """Forward an emitted event into the queue consumed by run()."""
+        self.emit_queue.put(decode_emit(frames))
+        router.send_multipart([requester, OK])
+
     def _terminate_proc(self, pid: Pid) -> None:
         """Terminate a process and remove it from the process table."""
         proc = self._procs.pop(pid, None)
@@ -219,6 +229,9 @@ class Broker:
             ),
             KILL: lambda router, requester, frames: self._handle_kill(
                 router, requester, frames, notifier
+            ),
+            EMIT: lambda router, requester, frames: self._handle_emit(
+                router, requester, frames
             ),
         }
 

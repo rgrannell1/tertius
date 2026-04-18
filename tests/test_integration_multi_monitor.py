@@ -3,7 +3,7 @@ from collections.abc import Generator
 from typing import Any
 
 from tertius.genserver import mcast
-from tertius.effects import EMonitor, EReceive, ESelf, ESend, ESpawn
+from tertius.effects import EEmit, EMonitor, EReceive, ESelf, ESend, ESpawn
 from tertius.exceptions import ProcessCrash
 from tertius.types import CastMsg, Envelope, Pid
 from tertius.vm import run
@@ -38,7 +38,7 @@ def watch_and_forward(
 # ---------------------------------------------------------------------------
 
 
-def _root_two_watchers() -> Generator[Any, Any, list[Any]]:
+def _root_two_watchers() -> Generator[Any, Any, None]:
     me: Pid = yield ESelf()
     crasher: Pid = yield ESpawn(
         fn_name="crash_on_command"
@@ -66,7 +66,7 @@ def _root_two_watchers() -> Generator[Any, Any, list[Any]]:
             case CastMsg(body=body):
                 results.append(body)
 
-    return results
+    yield EEmit(results)
 
 
 _SCOPE = {"crash_on_command": crash_on_command, "watch_and_forward": watch_and_forward}
@@ -79,7 +79,7 @@ _SCOPE = {"crash_on_command": crash_on_command, "watch_and_forward": watch_and_f
 def test_all_monitors_receive_crash_notification():
     """Proves that every process monitoring a crasher receives a ProcessCrash."""
 
-    results = run(_root_two_watchers, scope=_SCOPE)
+    results = next(run(_root_two_watchers, scope=_SCOPE))
     assert len(results) == 2
     assert all(isinstance(res, ProcessCrash) for res in results)
 
@@ -87,6 +87,6 @@ def test_all_monitors_receive_crash_notification():
 def test_all_crash_notifications_identify_same_pid():
     """Proves that all crash notifications carry the same crashed pid."""
 
-    results = run(_root_two_watchers, scope=_SCOPE)
+    results = next(run(_root_two_watchers, scope=_SCOPE))
     pids = {res.pid for res in results}
     assert len(pids) == 1
