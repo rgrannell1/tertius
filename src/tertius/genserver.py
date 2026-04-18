@@ -23,6 +23,10 @@ class GenServer[StateT]:
         """Handle a call message. Return (new_state, reply), or yield effects then return it."""
         raise NotImplementedError
 
+    def handle_info(self, state: StateT, body: Any) -> Any:
+        """Handle any message that isn't a cast or call. Return the new state."""
+        return state
+
     def loop(self, *args: Any) -> Generator[EReceive | ESend, Envelope | None, None]:
         """The main loop for the process. Receive messages, and handle them appropriately."""
 
@@ -40,6 +44,10 @@ class GenServer[StateT]:
                     result = self.handle_call(state, body)
                     state, reply = (yield from result) if inspect.isgenerator(result) else result
                     yield ESend(envelope.sender, ReplyMsg(ref=ref, body=reply))
+
+                case _:
+                    result = self.handle_info(state, envelope.body)
+                    state = (yield from result) if inspect.isgenerator(result) else result
 
 
 def mcall(pid: Pid, body: Any) -> Generator[ESend | EReceive, None | Envelope, Any]:
