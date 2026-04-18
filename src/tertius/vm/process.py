@@ -1,4 +1,6 @@
+import pickle
 import sys
+import time
 import traceback
 from collections.abc import Callable
 from functools import partial
@@ -7,7 +9,7 @@ from typing import Any
 import zmq
 from orbis import complete
 
-from tertius.constants import READY
+from tertius.constants import ERROR, READY
 from tertius.effects import (
     EEmit,
     EKill,
@@ -18,6 +20,7 @@ from tertius.effects import (
     ERegister,
     ESelf,
     ESend,
+    ESleep,
     ESpawn,
     EWhereis,
 )
@@ -47,7 +50,10 @@ def _handle_self(pid: Pid, _effect: ESelf) -> Pid:
 def _handle_spawn(ctrl: "zmq.Socket[bytes]", effect: ESpawn) -> Pid:
     """Handle the ESpawn effect; spawn a new process"""
     ctrl.send_multipart(encode_spawn(effect.fn_name, effect.args))
-    return decode_pid_reply(ctrl.recv_multipart())
+    reply = ctrl.recv_multipart()
+    if reply[0] == ERROR:
+        raise pickle.loads(reply[1])
+    return decode_pid_reply(reply)
 
 
 def _handle_send(dealer: "zmq.Socket[bytes]", pid: Pid, effect: ESend) -> None:
@@ -106,6 +112,12 @@ def _handle_monitor(ctrl: "zmq.Socket[bytes]", effect: EMonitor) -> None:
     ctrl.recv_multipart()
 
 
+def _handle_sleep(effect: ESleep) -> None:
+    """Handle the ESleep effect; block the process for the requested duration."""
+
+    time.sleep(effect.ms / 1000)
+
+
 def _handle_emit(ctrl: "zmq.Socket[bytes]", effect: EEmit) -> None:
     """Handle the EEmit effect; forward event to the broker's emit queue."""
 
@@ -137,9 +149,41 @@ def make_handlers(
         "register": partial(_handle_register, ctrl),
         "whereis": partial(_handle_whereis, ctrl),
         "monitor": partial(_handle_monitor, ctrl),
+        "sleep": _handle_sleep,
         "emit": partial(_handle_emit, ctrl),
         "kill": partial(_handle_kill, ctrl),
     }
+
+
+def _primed(gen: Any, ctrl: "zmq.Socket[bytes]") -> Any:
+    """Wrap a generator so READY is sent only after it survives its first step.
+
+    If the generator raises before yielding, no READY is sent — the broker detects
+    the dead process via its recv timeout.
+    """
+    try:
+        effect = next(gen)
+    except StopIteration:
+        ctrl.send_multipart([READY])
+        ctrl.recv_multipart()
+        return
+    ctrl.send_multipart([READY])
+    ctrl.recv_multipart()
+    pending_throw: BaseException | None = None
+    while True:
+        try:
+            send_val = yield effect
+            pending_throw = None
+        except BaseException as exc:
+            send_val = None
+            pending_throw = exc
+        try:
+            if pending_throw is not None:
+                effect = gen.throw(type(pending_throw), pending_throw, pending_throw.__traceback__)
+            else:
+                effect = gen.send(send_val)
+        except StopIteration:
+            return
 
 
 def process_entry(
@@ -164,10 +208,8 @@ def process_entry(
     ctrl.connect(ctrl_addr)
 
     try:
-        ctrl.send_multipart([READY])
-        ctrl.recv_multipart()
         fn = scope[fn_name]
-        complete(fn(*args), **make_handlers(pid, dealer, ctrl))
+        complete(_primed(fn(*args), ctrl), **make_handlers(pid, dealer, ctrl))
     except Exception as err:
         print(f"[tertius] process {pid} crashed: {err}", file=sys.stderr, flush=True)
         traceback.print_exc(file=sys.stderr)

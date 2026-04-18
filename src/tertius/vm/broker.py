@@ -1,4 +1,5 @@
 import multiprocessing
+import pickle
 import queue
 import threading
 from collections.abc import Callable
@@ -9,6 +10,7 @@ import zmq
 from tertius.constants import (
     CRASH,
     EMIT,
+    ERROR,
     KILL,
     LINK,
     MONITOR,
@@ -83,9 +85,7 @@ class Broker:
         """Spawn a new process and wait for it to signal readiness before returning its pid."""
         fn_name, args = decode_spawn(frames)
         if fn_name not in self._scope:
-            raise KeyError(
-                f"ESpawn: {fn_name!r} not in scope; available: {sorted(self._scope)}"
-            )
+            raise KeyError(f"ESpawn: {fn_name!r} not in scope; available: {sorted(self._scope)}")
         new_pid = self.alloc_pid()
         proc = multiprocessing.Process(
             target=process_entry,
@@ -104,14 +104,26 @@ class Broker:
 
         # Drain ctrl messages until READY arrives from new_pid.
         # Other messages that arrive in the meantime are dispatched normally.
-        while True:
-            child_frames = router.recv_multipart()
-            child_requester, child_command = child_frames[0], child_frames[1]
-            if child_command == READY and child_requester == bytes(new_pid):
-                router.send_multipart([child_requester, OK])
-                break
-            if child_command in handlers:
-                handlers[child_command](router, child_requester, child_frames)
+        router.setsockopt(zmq.RCVTIMEO, 1000)
+        try:
+            while True:
+                try:
+                    child_frames = router.recv_multipart()
+                except zmq.Again:
+                    if not proc.is_alive():
+                        raise RuntimeError(
+                            f"ESpawn: process {fn_name!r} died before sending READY "
+                            f"(exit code {proc.exitcode})"
+                        )
+                    continue
+                child_requester, child_command = child_frames[0], child_frames[1]
+                if child_command == READY and child_requester == bytes(new_pid):
+                    router.send_multipart([child_requester, OK])
+                    break
+                if child_command in handlers:
+                    handlers[child_command](router, child_requester, child_frames)
+        finally:
+            router.setsockopt(zmq.RCVTIMEO, -1)
 
         router.send_multipart([requester] + encode_pid_reply(new_pid))
 
@@ -279,4 +291,7 @@ class Broker:
             command = frames[1]
 
             if command in handlers:
-                handlers[command](router, requester, frames)
+                try:
+                    handlers[command](router, requester, frames)
+                except Exception as err:
+                    router.send_multipart([requester, ERROR, pickle.dumps(err)])

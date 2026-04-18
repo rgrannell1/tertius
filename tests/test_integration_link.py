@@ -23,8 +23,8 @@ from tertius.vm import run
 
 
 def crash_immediately() -> Generator[Any, Any, None]:
+    yield ESelf()
     raise RuntimeError("bang")
-    yield
 
 
 def linked_worker(peer_pid_bytes: bytes) -> Generator[Any, Any, None]:

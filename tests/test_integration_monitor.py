@@ -3,7 +3,7 @@
 from collections.abc import Generator
 from typing import Any
 
-from tertius.effects import EEmit, EMonitor, EReceive, ESpawn
+from tertius.effects import EEmit, EMonitor, EReceive, ESpawn, ESelf
 from tertius.exceptions import ProcessCrash
 from tertius.types import Envelope, Pid
 from tertius.vm import run
@@ -15,10 +15,10 @@ from tertius.vm import run
 
 
 def crash_immediately() -> Generator[Any, Any, None]:
-    """Process that raises unconditionally."""
+    """Process that starts successfully then crashes on its first step."""
 
+    yield ESelf()
     raise RuntimeError("boom")
-    yield  # make it a generator
 
 
 def exit_cleanly() -> Generator[Any, Any, None]:
