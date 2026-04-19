@@ -3,7 +3,17 @@
 [![CI](https://github.com/rgrannell1/tertius/actions/workflows/ci.yml/badge.svg)](https://github.com/rgrannell1/tertius/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/rgrannell1/tertius/graph/badge.svg?token=gGULQLuaTn)](https://codecov.io/gh/rgrannell1/tertius)
 
-An effects-based multiprocessing runtime for Python, inspired by Erlang. Tertius uses [orbis](https://github.com/rgrannell1/orbis) algebraic effects within a process, and ZMQ to pass messages between these processes.
+An effects-based multiprocessing runtime for Python, inspired by Erlang. Tertius uses [orbis](https://github.com/rgrannell1/orbis) algebraic effects within a process, and processes then intercommunicate using message-passing over ZMQ sockets.
+
+
+```
+effects.py      effects for intercommunication
+genserver.py    a minimal server that receives and sends messages
+vm/
+  broker.py     VM runtime; allocates pids, routes messages, handles control operations, tracks state.
+  messages.py   IPC message encoding.
+  process.py    process-level handlers.
+```
 
 ## Effects
 
