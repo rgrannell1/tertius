@@ -24,6 +24,8 @@ def handle_register(
     requester: bytes,
     frames: list[bytes],
 ) -> None:
+    # Names are process-scoped: the pid is derived from the requester identity
+    # rather than the message body, so a process can only register itself.
     names[decode_register(frames)] = Pid.from_bytes(requester)
     router.send_multipart([requester, OK])
 
@@ -48,9 +50,12 @@ def handle_link(
 ) -> None:
     requester_pid = Pid.from_bytes(requester)
     target_pid = decode_link(frames)
+    # Ack immediately so the requester isn't blocked while we check the tombstone.
     router.send_multipart([requester, OK])
 
     if target_pid in dead:
+        # Target already gone — deliver the crash signal retroactively so the
+        # caller behaves consistently whether the link races with a crash or not.
         kill_msg = LinkedCrash(pid=target_pid, reason=dead[target_pid])
         notifier.send_multipart(
             encode_linked_crash_notification(requester_pid, target_pid, kill_msg)
@@ -74,6 +79,9 @@ def handle_monitor(
     router.send_multipart([requester, OK])
 
     if target_pid in dead:
+        # Same retroactive delivery as handle_link — the monitor guarantee is
+        # that you always receive exactly one notification, even if the target
+        # died before you asked.
         crash_msg = ProcessCrash(pid=target_pid, reason=dead[target_pid])
         notifier.send_multipart(
             encode_crash_notification(requester_pid, target_pid, crash_msg)
@@ -89,5 +97,7 @@ def handle_emit(
     requester: bytes,
     frames: list[bytes],
 ) -> None:
+    # Emitted values are surfaced to the host application via the queue rather
+    # than being routed to another process, so they cross the VM boundary.
     emit_queue.put(decode_emit(frames))
     router.send_multipart([requester, OK])

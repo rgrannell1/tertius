@@ -22,6 +22,7 @@ def _start_process(
     scope: Scope,
     procs: dict[Pid, multiprocessing.Process],
 ) -> multiprocessing.Process:
+    # Daemon=True so child processes don't outlive the broker if it exits uncleanly.
     proc = multiprocessing.Process(
         target=process_entry,
         args=(pid.id, broker_addr, ctrl_addr, fn_name, args, scope),
@@ -39,14 +40,22 @@ def _await_ready(
     fn_name: str,
     handlers: dict,
 ) -> None:
-    # Drain ctrl messages until READY arrives from new_pid.
-    # Other messages that arrive in the meantime are dispatched normally.
+    """Block until the newly spawned process sends READY on the control socket.
+
+    Other control messages that arrive while waiting are dispatched normally —
+    the system can't simply pause while one process is starting up, since other
+    live processes may be sending control messages concurrently.
+
+    A 1s receive timeout lets us check if the child died without ever sending
+    READY, which would otherwise block forever.
+    """
     router.setsockopt(zmq.RCVTIMEO, 1000)
     try:
         while True:
             try:
                 child_frames = router.recv_multipart()
             except zmq.Again:
+                # Timed out waiting — check if the process is still alive before retrying.
                 if not proc.is_alive():
                     raise RuntimeError(
                         f"ESpawn: process {fn_name!r} died before sending READY "
@@ -81,5 +90,7 @@ def handle_spawn(
 
     new_pid = alloc_pid()
     proc = _start_process(new_pid, fn_name, args, broker_addr, ctrl_addr, scope, procs)
+    # Block until the process is ready before replying to the caller, so the
+    # caller can safely send to the new pid immediately after receiving its pid back.
     _await_ready(router, proc, new_pid, fn_name, handlers)
     router.send_multipart([requester] + encode_pid_reply(new_pid))

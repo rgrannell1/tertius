@@ -35,30 +35,49 @@ Scope = dict[str, Callable[..., Any]]
 
 
 class Broker:
+    """Central VM coordinator. Runs two sockets on separate threads:
+
+    - run_data: a dumb ROUTER that forwards messages between processes by
+      address. Processes talk to each other through this without the broker
+      needing to understand the content.
+
+    - run_control: a ROUTER that handles VM-level operations (spawn, kill,
+      link, monitor, etc.). All state that crosses process boundaries lives
+      here — process registry, links, monitors, the dead-process tombstones.
+    """
+
     def __init__(
         self, broker_addr: str, ctrl_addr: str, ctx: "zmq.Context[bytes]", scope: Scope
     ) -> None:
         self._broker_addr = broker_addr
         self._ctrl_addr = ctrl_addr
         self._ctx = ctx
-        self._scope = scope
+        self._scope = scope  # functions available to spawn by name
         self._next_pid = 0
         self._pid_lock = threading.Lock()
-        self._names: dict[str, Pid] = {}
-        self._monitors: dict[Pid, list[Pid]] = {}
-        self._links: dict[Pid, list[Pid]] = {}
-        self._dead: dict[Pid, Exception] = {}
-        self._procs: dict[Pid, multiprocessing.Process] = {}
-        self.emit_queue: queue.Queue[Any] = queue.Queue()
-        self.ready = threading.Event()
+        self._names: dict[str, Pid] = {}  # registered name -> pid
+        self._monitors: dict[Pid, list[Pid]] = {}  # watched pid -> list of watchers
+        self._links: dict[Pid, list[Pid]] = {}  # pid -> bidirectional crash partners
+        self._dead: dict[Pid, Exception] = {}  # tombstone: pid -> crash reason
+        self._procs: dict[Pid, multiprocessing.Process] = {}  # live OS processes
+        self.emit_queue: queue.Queue[Any] = queue.Queue()  # outbound events for the host
+        self.ready = threading.Event()  # signals that run_data is bound and accepting
 
     def alloc_pid(self) -> Pid:
+        # Lock ensures uniqueness across threads; pids are never reused so the
+        # dead dict remains a reliable tombstone after a process exits.
         with self._pid_lock:
             pid = Pid(self._next_pid)
             self._next_pid += 1
             return pid
 
     def run_data(self) -> None:
+        """Blind message relay between processes.
+
+        Processes address each other directly by pid. The broker just forwards
+        frames without inspecting the body — keeping latency low and the data
+        path free of VM logic.
+        """
         router: zmq.Socket[bytes] = self._ctx.socket(zmq.ROUTER)
         router.bind(self._broker_addr)
         self.ready.set()
@@ -68,9 +87,20 @@ class Broker:
             router.send_multipart([target, sender_pid, body])
 
     def run_control(self) -> None:
+        """Serialised handler loop for all VM control operations.
+
+        Single-threaded by design: all mutable VM state (_names, _links,
+        _monitors, _dead, _procs) is touched exclusively here, so no locking
+        is needed beyond alloc_pid.
+
+        The notifier DEALER connects back to the data broker so that crash
+        propagation messages (to monitors and linked processes) flow through
+        the same relay path as normal inter-process messages.
+        """
+        # Wait until the data broker is bound so the notifier can connect.
         self.ready.wait()
 
-        # Injects crash notifications into the data broker on behalf of crashed processes
+        # Sends crash/kill notifications to affected processes via the data broker.
         notifier: zmq.Socket[bytes] = self._ctx.socket(zmq.DEALER)
         notifier.identity = b"vm-notifier"
         notifier.connect(self._broker_addr)
@@ -78,6 +108,8 @@ class Broker:
         router: zmq.Socket[bytes] = self._ctx.socket(zmq.ROUTER)
         router.bind(self._ctrl_addr)
 
+        # Handlers are pre-bound with their state slices via partial so the
+        # dispatch loop stays uniform — every handler receives (router, requester, frames).
         handlers: dict = {}
         handlers[SPAWN] = partial(
             handle_spawn,
@@ -107,4 +139,6 @@ class Broker:
                 try:
                     handlers[command](router, requester, frames)
                 except Exception as err:
+                    # Send the exception back to the caller rather than crashing
+                    # the broker — one bad request shouldn't take down the VM.
                     router.send_multipart([requester, ERROR, pickle.dumps(err)])
