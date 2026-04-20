@@ -1,7 +1,14 @@
 """Types for the Uqbar runtime"""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+
+
+@dataclass(frozen=True)
+class Codec[T]:
+    encode: Callable[..., list[bytes]]
+    decode: Callable[[list[bytes]], T]
 
 
 @dataclass(frozen=True)

@@ -20,19 +20,11 @@ The frames we pass have the layout (ROUTER-received):
 """
 
 import pickle
-from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 
 from tertius.constants import CRASH, EMIT, KILL, LINK, MONITOR, REGISTER, SPAWN, WHEREIS
 from tertius.exceptions import LinkedCrash, ProcessCrash
-from tertius.types import Envelope, Pid
-
-
-@dataclass(frozen=True)
-class Codec[T]:
-    encode: Callable[..., list[bytes]]
-    decode: Callable[[list[bytes]], T]
+from tertius.types import Codec, Envelope, Pid
 
 
 # ---------------------------------------------------------------------------
@@ -68,11 +60,15 @@ def _decode_envelope(frames: list[bytes]) -> Envelope:
 envelope: Codec[Envelope] = Codec(encode=_encode_envelope, decode=_decode_envelope)
 
 
-def encode_crash_notification(target: Pid, sender: Pid, crash: ProcessCrash) -> list[bytes]:
+def encode_crash_notification(
+    target: Pid, sender: Pid, crash: ProcessCrash
+) -> list[bytes]:
     return [bytes(target), bytes(sender), pickle.dumps(crash)]
 
 
-def encode_linked_crash_notification(target: Pid, sender: Pid, crash: LinkedCrash) -> list[bytes]:
+def encode_linked_crash_notification(
+    target: Pid, sender: Pid, crash: LinkedCrash
+) -> list[bytes]:
     return [bytes(target), bytes(sender), pickle.dumps(crash)]
 
 
@@ -90,7 +86,9 @@ def _decode_spawn(frames: list[bytes]) -> tuple[str, tuple[Any, ...]]:
     return payload[0].decode(), pickle.loads(payload[1])
 
 
-spawn: Codec[tuple[str, tuple[Any, ...]]] = Codec(encode=_encode_spawn, decode=_decode_spawn)
+spawn: Codec[tuple[str, tuple[Any, ...]]] = Codec(
+    encode=_encode_spawn, decode=_decode_spawn
+)
 
 
 def _encode_register(name: str) -> list[bytes]:
@@ -194,4 +192,6 @@ def _decode_whereis_reply(frames: list[bytes]) -> Pid | None:
     return Pid.from_bytes(frames[0]) if frames[0] else None
 
 
-whereis_reply: Codec[Pid | None] = Codec(encode=_encode_whereis_reply, decode=_decode_whereis_reply)
+whereis_reply: Codec[Pid | None] = Codec(
+    encode=_encode_whereis_reply, decode=_decode_whereis_reply
+)
