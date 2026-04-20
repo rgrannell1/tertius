@@ -1,3 +1,5 @@
+"""Project-wide constants."""
+
 SPAWN = b"spawn"
 EMIT = b"emit"
 KILL = b"kill"

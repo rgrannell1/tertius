@@ -20,13 +20,24 @@ The frames we pass have the layout (ROUTER-received):
 """
 
 import pickle
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from tertius.constants import CRASH, EMIT, KILL, LINK, MONITOR, REGISTER, SPAWN, WHEREIS
 from tertius.exceptions import LinkedCrash, ProcessCrash
 from tertius.types import Envelope, Pid
 
-# Frame Accessors
+
+@dataclass(frozen=True)
+class Codec[T]:
+    encode: Callable[..., list[bytes]]
+    decode: Callable[[list[bytes]], T]
+
+
+# ---------------------------------------------------------------------------
+# Frame accessors
+# ---------------------------------------------------------------------------
 
 
 def frame_id(frames: list[bytes]) -> bytes:
@@ -46,31 +57,22 @@ def frame_payload(frames: list[bytes]) -> list[bytes]:
 # ---------------------------------------------------------------------------
 
 
-def encode_envelope(target: Pid, sender: Pid, body: Any) -> list[bytes]:
-    """Encode an envelope as sent by a DEALER."""
-
+def _encode_envelope(target: Pid, sender: Pid, body: Any) -> list[bytes]:
     return [bytes(target), bytes(sender), pickle.dumps(body)]
 
 
-def decode_received_envelope(frames: list[bytes]) -> Envelope:
-    """Decode an envelope as received by a DEALER (routing frame already stripped)."""
-
+def _decode_envelope(frames: list[bytes]) -> Envelope:
     return Envelope(sender=Pid.from_bytes(frames[0]), body=pickle.loads(frames[1]))
 
 
-def encode_crash_notification(
-    target: Pid, sender: Pid, crash: ProcessCrash
-) -> list[bytes]:
-    """Encode a crash notification as sent by a DEALER."""
+envelope: Codec[Envelope] = Codec(encode=_encode_envelope, decode=_decode_envelope)
 
+
+def encode_crash_notification(target: Pid, sender: Pid, crash: ProcessCrash) -> list[bytes]:
     return [bytes(target), bytes(sender), pickle.dumps(crash)]
 
 
-def encode_linked_crash_notification(
-    target: Pid, sender: Pid, crash: LinkedCrash
-) -> list[bytes]:
-    """Encode a linked-crash kill signal as sent by a DEALER."""
-
+def encode_linked_crash_notification(target: Pid, sender: Pid, crash: LinkedCrash) -> list[bytes]:
     return [bytes(target), bytes(sender), pickle.dumps(crash)]
 
 
@@ -79,101 +81,93 @@ def encode_linked_crash_notification(
 # ---------------------------------------------------------------------------
 
 
-def encode_spawn(fn_name: str, args: tuple[Any, ...]) -> list[bytes]:
-    """Encode a spawn request as sent by a DEALER."""
-
+def _encode_spawn(fn_name: str, args: tuple[Any, ...]) -> list[bytes]:
     return [SPAWN, fn_name.encode(), pickle.dumps(args)]
 
 
-def decode_spawn(frames: list[bytes]) -> tuple[str, tuple[Any, ...]]:
-    """Decode a spawn request as received by a DEALER."""
-
+def _decode_spawn(frames: list[bytes]) -> tuple[str, tuple[Any, ...]]:
     payload = frame_payload(frames)
     return payload[0].decode(), pickle.loads(payload[1])
 
 
-def encode_register(name: str) -> list[bytes]:
-    """Encode a register request as sent by a DEALER."""
+spawn: Codec[tuple[str, tuple[Any, ...]]] = Codec(encode=_encode_spawn, decode=_decode_spawn)
 
+
+def _encode_register(name: str) -> list[bytes]:
     return [REGISTER, name.encode()]
 
 
-def decode_register(frames: list[bytes]) -> str:
-    """Decode a register request as received by a DEALER."""
-
+def _decode_register(frames: list[bytes]) -> str:
     return frame_payload(frames)[0].decode()
 
 
-def encode_whereis(name: str) -> list[bytes]:
-    """Encode a whereis request as sent by a DEALER."""
+register: Codec[str] = Codec(encode=_encode_register, decode=_decode_register)
 
+
+def _encode_whereis(name: str) -> list[bytes]:
     return [WHEREIS, name.encode()]
 
 
-def decode_whereis(frames: list[bytes]) -> str:
-    """Decode a whereis request as received by a DEALER."""
-
+def _decode_whereis(frames: list[bytes]) -> str:
     return frame_payload(frames)[0].decode()
 
 
-def encode_link(target: Pid) -> list[bytes]:
-    """Encode a link request as sent by a DEALER."""
+whereis: Codec[str] = Codec(encode=_encode_whereis, decode=_decode_whereis)
 
+
+def _encode_link(target: Pid) -> list[bytes]:
     return [LINK, bytes(target)]
 
 
-def decode_link(frames: list[bytes]) -> Pid:
-    """Decode a link request as received by a DEALER."""
-
+def _decode_link(frames: list[bytes]) -> Pid:
     return Pid.from_bytes(frame_payload(frames)[0])
 
 
-def encode_monitor(target: Pid) -> list[bytes]:
-    """Encode a monitor request as sent by a DEALER."""
+link: Codec[Pid] = Codec(encode=_encode_link, decode=_decode_link)
 
+
+def _encode_monitor(target: Pid) -> list[bytes]:
     return [MONITOR, bytes(target)]
 
 
-def decode_monitor(frames: list[bytes]) -> Pid:
-    """Decode a monitor request as received by a DEALER."""
-
+def _decode_monitor(frames: list[bytes]) -> Pid:
     return Pid.from_bytes(frame_payload(frames)[0])
 
 
-def encode_emit(body: Any) -> list[bytes]:
-    """Encode an emit request as sent by a DEALER."""
+monitor: Codec[Pid] = Codec(encode=_encode_monitor, decode=_decode_monitor)
 
+
+def _encode_emit(body: Any) -> list[bytes]:
     return [EMIT, pickle.dumps(body)]
 
 
-def decode_emit(frames: list[bytes]) -> Any:
-    """Decode an emit request as received by a DEALER."""
-
+def _decode_emit(frames: list[bytes]) -> Any:
     return pickle.loads(frame_payload(frames)[0])
 
 
-def encode_kill(target: Pid) -> list[bytes]:
-    """Encode a kill request as sent by a DEALER."""
+emit: Codec[Any] = Codec(encode=_encode_emit, decode=_decode_emit)
 
+
+def _encode_kill(target: Pid) -> list[bytes]:
     return [KILL, bytes(target)]
 
 
-def decode_kill(frames: list[bytes]) -> Pid:
-    """Decode a kill request as received by a DEALER."""
-
+def _decode_kill(frames: list[bytes]) -> Pid:
     return Pid.from_bytes(frame_payload(frames)[0])
 
 
-def encode_crash(reason: Exception) -> list[bytes]:
-    """Encode a crash request as sent by a DEALER."""
+kill: Codec[Pid] = Codec(encode=_encode_kill, decode=_decode_kill)
 
+
+def _encode_crash(reason: Exception) -> list[bytes]:
     return [CRASH, pickle.dumps(reason)]
 
 
-def decode_crash(frames: list[bytes]) -> Exception:
-    """Decode a crash request as received by a DEALER."""
-
+def _decode_crash(frames: list[bytes]) -> Exception:
     return pickle.loads(frame_payload(frames)[0])
+
+
+crash: Codec[Exception] = Codec(encode=_encode_crash, decode=_decode_crash)
 
 
 # ---------------------------------------------------------------------------
@@ -181,25 +175,23 @@ def decode_crash(frames: list[bytes]) -> Exception:
 # ---------------------------------------------------------------------------
 
 
-def encode_pid_reply(pid: Pid) -> list[bytes]:
-    """Encode a PID reply as sent by a DEALER."""
-
+def _encode_pid_reply(pid: Pid) -> list[bytes]:
     return [bytes(pid)]
 
 
-def decode_pid_reply(frames: list[bytes]) -> Pid:
-    """Decode a PID reply as received by a DEALER."""
-
+def _decode_pid_reply(frames: list[bytes]) -> Pid:
     return Pid.from_bytes(frames[0])
 
 
-def encode_whereis_reply(pid: Pid | None) -> list[bytes]:
-    """Encode a whereis reply as sent by a DEALER."""
+pid_reply: Codec[Pid] = Codec(encode=_encode_pid_reply, decode=_decode_pid_reply)
 
+
+def _encode_whereis_reply(pid: Pid | None) -> list[bytes]:
     return [bytes(pid) if pid else b""]
 
 
-def decode_whereis_reply(frames: list[bytes]) -> Pid | None:
-    """Decode a whereis reply as received by a DEALER."""
-
+def _decode_whereis_reply(frames: list[bytes]) -> Pid | None:
     return Pid.from_bytes(frames[0]) if frames[0] else None
+
+
+whereis_reply: Codec[Pid | None] = Codec(encode=_encode_whereis_reply, decode=_decode_whereis_reply)

@@ -5,14 +5,14 @@ from tertius.exceptions import LinkedCrash, ProcessCrash
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.messages import (
-    decode_emit,
-    decode_link,
-    decode_monitor,
-    decode_register,
-    decode_whereis,
+    emit,
     encode_crash_notification,
     encode_linked_crash_notification,
-    encode_whereis_reply,
+    link,
+    monitor,
+    register,
+    whereis,
+    whereis_reply,
 )
 
 
@@ -24,7 +24,7 @@ def handle_register(
 ) -> None:
     # Names are process-scoped: the pid is derived from the requester identity
     # rather than the message body, so a process can only register itself.
-    state.names[decode_register(frames)] = Pid.from_bytes(requester)
+    state.names[register.decode(frames)] = Pid.from_bytes(requester)
     router.send_multipart([requester, OK])
 
 
@@ -34,8 +34,8 @@ def handle_whereis(
     requester: bytes,
     frames: list[bytes],
 ) -> None:
-    pid = state.names.get(decode_whereis(frames))
-    router.send_multipart([requester] + encode_whereis_reply(pid))
+    pid = state.names.get(whereis.decode(frames))
+    router.send_multipart([requester] + whereis_reply.encode(pid))
 
 
 def handle_link(
@@ -46,7 +46,7 @@ def handle_link(
     frames: list[bytes],
 ) -> None:
     requester_pid = Pid.from_bytes(requester)
-    target_pid = decode_link(frames)
+    target_pid = link.decode(frames)
     # Ack immediately so the requester isn't blocked while we check the tombstone.
     router.send_multipart([requester, OK])
 
@@ -70,7 +70,7 @@ def handle_monitor(
     requester: bytes,
     frames: list[bytes],
 ) -> None:
-    target_pid = decode_monitor(frames)
+    target_pid = monitor.decode(frames)
     requester_pid = Pid.from_bytes(requester)
     router.send_multipart([requester, OK])
 
@@ -95,5 +95,5 @@ def handle_emit(
 ) -> None:
     # Emitted values are surfaced to the host application via the queue rather
     # than being routed to another process, so they cross the VM boundary.
-    state.emit_queue.put(decode_emit(frames))
+    state.emit_queue.put(emit.decode(frames))
     router.send_multipart([requester, OK])

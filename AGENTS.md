@@ -8,3 +8,10 @@
 - No single-letter variable names
 - It is critical to preserve as much type-information as possible, as that's a primary benefit of algebraic effects
 - No mid file imports
+- Do not remove my docstrings
+- Do not delete comments, it's annoying. I use them to make it obvious what a block of code is intended to do
+- use the constants file for constants. document with a plain english line comment what the thing represents. group constants in a block of related terms.
+- Avoid deeply nested lines
+- Do not write large functions. Split into subfunctions
+- Do not write inner functions; use partial application instead
+- Avoid using optional, or `X | None = None` unless there's a direct need for it

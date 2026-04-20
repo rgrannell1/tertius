@@ -1,5 +1,3 @@
-import multiprocessing
-
 import zmq
 
 from tertius.constants import OK
@@ -7,10 +5,10 @@ from tertius.exceptions import LinkedCrash, ProcessCrash
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.messages import (
-    decode_crash,
-    decode_kill,
+    crash,
     encode_crash_notification,
     encode_linked_crash_notification,
+    kill,
 )
 
 
@@ -75,7 +73,7 @@ def handle_kill(
     requester: bytes,
     frames: list[bytes],
 ) -> None:
-    target_pid = decode_kill(frames)
+    target_pid = kill.decode(frames)
     # Ack before terminating so the caller isn't blocked waiting on a process
     # that may take a moment to actually die.
     router.send_multipart([requester, OK])
@@ -102,7 +100,7 @@ def handle_crash(
     # A process reports its own crash rather than the broker detecting it via
     # polling, so the reason is accurate and propagation is synchronous.
     crashed_pid = Pid.from_bytes(requester)
-    reason = decode_crash(frames)
+    reason = crash.decode(frames)
 
     _record_crash(state, notifier, crashed_pid, reason)
     router.send_multipart([requester, OK])

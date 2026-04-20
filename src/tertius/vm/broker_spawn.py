@@ -7,7 +7,7 @@ import zmq
 from tertius.constants import OK, READY
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
-from tertius.vm.messages import decode_spawn, encode_pid_reply
+from tertius.vm.messages import pid_reply, spawn
 from tertius.vm.process import process_entry
 
 Scope = dict[str, Callable[..., Any]]
@@ -83,7 +83,7 @@ def handle_spawn(
     requester: bytes,
     frames: list[bytes],
 ) -> None:
-    fn_name, args = decode_spawn(frames)
+    fn_name, args = spawn.decode(frames)
 
     if fn_name not in scope:
         raise KeyError(f"ESpawn: {fn_name!r} not in scope; available: {sorted(scope)}")
@@ -93,4 +93,4 @@ def handle_spawn(
     # Block until the process is ready before replying to the caller, so the
     # caller can safely send to the new pid immediately after receiving its pid back.
     _await_ready(router, proc, new_pid, fn_name, handlers)
-    router.send_multipart([requester] + encode_pid_reply(new_pid))
+    router.send_multipart([requester] + pid_reply.encode(new_pid))

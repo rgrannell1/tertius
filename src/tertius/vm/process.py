@@ -27,18 +27,17 @@ from tertius.effects import (
 from tertius.exceptions import LinkedCrash
 from tertius.types import Envelope, Pid
 from tertius.vm.messages import (
-    decode_pid_reply,
-    decode_received_envelope,
-    decode_whereis_reply,
-    encode_crash,
-    encode_emit,
-    encode_envelope,
-    encode_kill,
-    encode_link,
-    encode_monitor,
-    encode_register,
-    encode_spawn,
-    encode_whereis,
+    crash,
+    emit,
+    envelope,
+    kill,
+    link,
+    monitor,
+    pid_reply,
+    register,
+    spawn,
+    whereis,
+    whereis_reply,
 )
 
 
@@ -49,42 +48,42 @@ def _handle_self(pid: Pid, _effect: ESelf) -> Pid:
 
 def _handle_spawn(ctrl: "zmq.Socket[bytes]", effect: ESpawn) -> Pid:
     """Handle the ESpawn effect; spawn a new process"""
-    ctrl.send_multipart(encode_spawn(effect.fn_name, effect.args))
+    ctrl.send_multipart(spawn.encode(effect.fn_name, effect.args))
     reply = ctrl.recv_multipart()
     if reply[0] == ERROR:
         raise pickle.loads(reply[1])
-    return decode_pid_reply(reply)
+    return pid_reply.decode(reply)
 
 
 def _handle_send(dealer: "zmq.Socket[bytes]", pid: Pid, effect: ESend) -> None:
     """Handle the ESend effect; send a message to a process"""
-    dealer.send_multipart(encode_envelope(effect.pid, pid, effect.body))
+    dealer.send_multipart(envelope.encode(effect.pid, pid, effect.body))
 
 
 def _handle_link(ctrl: "zmq.Socket[bytes]", effect: ELink) -> None:
     """Handle the ELink effect; register a bidirectional link with another process"""
-    ctrl.send_multipart(encode_link(effect.pid))
+    ctrl.send_multipart(link.encode(effect.pid))
     ctrl.recv_multipart()
 
 
 def _handle_receive(dealer: "zmq.Socket[bytes]", _effect: EReceive) -> Envelope:
     """Handle the EReceive effect; receive a message from a process"""
-    envelope = decode_received_envelope(dealer.recv_multipart())
-    if isinstance(envelope.body, LinkedCrash):
-        raise envelope.body
-    return envelope
+    env = envelope.decode(dealer.recv_multipart())
+    if isinstance(env.body, LinkedCrash):
+        raise env.body
+    return env
 
 
 def _handle_register(ctrl: "zmq.Socket[bytes]", effect: ERegister) -> None:
     """Handle the ERegister effect; register a process name"""
-    ctrl.send_multipart(encode_register(effect.name))
+    ctrl.send_multipart(register.encode(effect.name))
     ctrl.recv_multipart()
 
 
 def _handle_whereis(ctrl: "zmq.Socket[bytes]", effect: EWhereis) -> Pid | None:
     """Handle the EWhereis effect; lookup a process by name"""
-    ctrl.send_multipart(encode_whereis(effect.name))
-    return decode_whereis_reply(ctrl.recv_multipart())
+    ctrl.send_multipart(whereis.encode(effect.name))
+    return whereis_reply.decode(ctrl.recv_multipart())
 
 
 def _handle_receive_timeout(
@@ -99,16 +98,16 @@ def _handle_receive_timeout(
     if dealer not in ready:
         return None
 
-    envelope = decode_received_envelope(dealer.recv_multipart())
-    if isinstance(envelope.body, LinkedCrash):
-        raise envelope.body
-    return envelope
+    env = envelope.decode(dealer.recv_multipart())
+    if isinstance(env.body, LinkedCrash):
+        raise env.body
+    return env
 
 
 def _handle_monitor(ctrl: "zmq.Socket[bytes]", effect: EMonitor) -> None:
     """Handle the EMonitor effect; monitor a process for crashes"""
 
-    ctrl.send_multipart(encode_monitor(effect.pid))
+    ctrl.send_multipart(monitor.encode(effect.pid))
     ctrl.recv_multipart()
 
 
@@ -121,14 +120,14 @@ def _handle_sleep(effect: ESleep) -> None:
 def _handle_emit(ctrl: "zmq.Socket[bytes]", effect: EEmit) -> None:
     """Handle the EEmit effect; forward event to the broker's emit queue."""
 
-    ctrl.send_multipart(encode_emit(effect.body))
+    ctrl.send_multipart(emit.encode(effect.body))
     ctrl.recv_multipart()
 
 
 def _handle_kill(ctrl: "zmq.Socket[bytes]", effect: EKill) -> None:
     """Handle the EKill effect; terminate a process via the broker"""
 
-    ctrl.send_multipart(encode_kill(effect.pid))
+    ctrl.send_multipart(kill.encode(effect.pid))
     ctrl.recv_multipart()
 
 
@@ -215,7 +214,7 @@ def process_entry(
     except Exception as err:
         print(f"[tertius] process {pid} crashed: {err}", file=sys.stderr, flush=True)
         traceback.print_exc(file=sys.stderr)
-        ctrl.send_multipart(encode_crash(err))
+        ctrl.send_multipart(crash.encode(err))
         ctrl.recv_multipart()
     finally:
         dealer.close()
