@@ -1,4 +1,3 @@
-import multiprocessing
 import pickle
 import queue
 import threading
@@ -15,7 +14,6 @@ from tertius.constants import (
     KILL,
     LINK,
     MONITOR,
-    OK,
     REGISTER,
     SPAWN,
     WHEREIS,
@@ -30,8 +28,32 @@ from tertius.vm.broker_handlers import (
     handle_whereis,
 )
 from tertius.vm.broker_spawn import handle_spawn
+from tertius.vm.broker_state import BrokerState
 
 Scope = dict[str, Callable[..., Any]]
+
+
+def make_ctrl_handlers(
+    alloc_pid: Callable[[], Pid],
+    scope: Scope,
+    broker_addr: str,
+    ctrl_addr: str,
+    state: BrokerState,
+    notifier: "zmq.Socket[bytes]",
+) -> dict[bytes, Callable[..., None]]:
+    """Factory for control command handlers"""
+
+    handlers: dict[bytes, Callable[..., None]] = {}
+    handlers[SPAWN] = partial(handle_spawn, alloc_pid, scope, broker_addr, ctrl_addr, state, handlers)
+    handlers[REGISTER] = partial(handle_register, state)
+    handlers[WHEREIS] = partial(handle_whereis, state)
+    handlers[LINK] = partial(handle_link, state, notifier)
+    handlers[MONITOR] = partial(handle_monitor, state, notifier)
+    handlers[EMIT] = partial(handle_emit, state)
+    handlers[KILL] = partial(handle_kill, state, notifier)
+    handlers[CRASH] = partial(handle_crash, state, notifier)
+
+    return handlers
 
 
 class Broker:
@@ -52,20 +74,20 @@ class Broker:
         self._broker_addr = broker_addr
         self._ctrl_addr = ctrl_addr
         self._ctx = ctx
-        self._scope = scope  # functions available to spawn by name
+        self._scope = scope
         self._next_pid = 0
         self._pid_lock = threading.Lock()
-        self._names: dict[str, Pid] = {}  # registered name -> pid
-        self._monitors: dict[Pid, list[Pid]] = {}  # watched pid -> list of watchers
-        self._links: dict[Pid, list[Pid]] = {}  # pid -> bidirectional crash partners
-        self._dead: dict[Pid, Exception] = {}  # tombstone: pid -> crash reason
-        self._procs: dict[Pid, multiprocessing.Process] = {}  # live OS processes
-        self.emit_queue: queue.Queue[Any] = queue.Queue()  # outbound events for the host
+        self._state = BrokerState()
         self.ready = threading.Event()  # signals that run_data is bound and accepting
+
+    @property
+    def emit_queue(self) -> "queue.Queue[Any]":
+        return self._state.emit_queue
 
     def alloc_pid(self) -> Pid:
         # Lock ensures uniqueness across threads; pids are never reused so the
         # dead dict remains a reliable tombstone after a process exits.
+
         with self._pid_lock:
             pid = Pid(self._next_pid)
             self._next_pid += 1
@@ -78,6 +100,7 @@ class Broker:
         frames without inspecting the body — keeping latency low and the data
         path free of VM logic.
         """
+
         router: zmq.Socket[bytes] = self._ctx.socket(zmq.ROUTER)
         router.bind(self._broker_addr)
         self.ready.set()
@@ -108,26 +131,9 @@ class Broker:
         router: zmq.Socket[bytes] = self._ctx.socket(zmq.ROUTER)
         router.bind(self._ctrl_addr)
 
-        # Handlers are pre-bound with their state slices via partial so the
-        # dispatch loop stays uniform — every handler receives (router, requester, frames).
-        handlers: dict = {}
-        handlers[SPAWN] = partial(
-            handle_spawn,
+        handlers = make_ctrl_handlers(
             self.alloc_pid, self._scope, self._broker_addr, self._ctrl_addr,
-            self._procs, handlers,
-        )
-        handlers[REGISTER] = partial(handle_register, self._names)
-        handlers[WHEREIS] = partial(handle_whereis, self._names)
-        handlers[LINK] = partial(handle_link, self._links, self._dead, notifier)
-        handlers[MONITOR] = partial(handle_monitor, self._monitors, self._dead, notifier)
-        handlers[EMIT] = partial(handle_emit, self.emit_queue)
-        handlers[KILL] = partial(
-            handle_kill,
-            self._procs, self._names, self._monitors, self._links, self._dead, notifier,
-        )
-        handlers[CRASH] = partial(
-            handle_crash,
-            self._names, self._monitors, self._links, self._dead, notifier,
+            self._state, notifier,
         )
 
         while True:

@@ -1,12 +1,12 @@
 import multiprocessing
 from collections.abc import Callable
-from functools import partial
 from typing import Any
 
 import zmq
 
 from tertius.constants import OK, READY
 from tertius.types import Pid
+from tertius.vm.broker_state import BrokerState
 from tertius.vm.messages import decode_spawn, encode_pid_reply
 from tertius.vm.process import process_entry
 
@@ -20,7 +20,7 @@ def _start_process(
     broker_addr: str,
     ctrl_addr: str,
     scope: Scope,
-    procs: dict[Pid, multiprocessing.Process],
+    state: BrokerState,
 ) -> multiprocessing.Process:
     # Daemon=True so child processes don't outlive the broker if it exits uncleanly.
     proc = multiprocessing.Process(
@@ -29,7 +29,7 @@ def _start_process(
         daemon=True,
     )
     proc.start()
-    procs[pid] = proc
+    state.procs[pid] = proc
     return proc
 
 
@@ -77,7 +77,7 @@ def handle_spawn(
     scope: Scope,
     broker_addr: str,
     ctrl_addr: str,
-    procs: dict[Pid, multiprocessing.Process],
+    state: BrokerState,
     handlers: dict,
     router: "zmq.Socket[bytes]",
     requester: bytes,
@@ -89,7 +89,7 @@ def handle_spawn(
         raise KeyError(f"ESpawn: {fn_name!r} not in scope; available: {sorted(scope)}")
 
     new_pid = alloc_pid()
-    proc = _start_process(new_pid, fn_name, args, broker_addr, ctrl_addr, scope, procs)
+    proc = _start_process(new_pid, fn_name, args, broker_addr, ctrl_addr, scope, state)
     # Block until the process is ready before replying to the caller, so the
     # caller can safely send to the new pid immediately after receiving its pid back.
     _await_ready(router, proc, new_pid, fn_name, handlers)
