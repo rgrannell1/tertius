@@ -15,7 +15,7 @@ from tertius.vm import run
 
 
 class Echo(GenServer[None]):
-    def init(self) -> None:
+    def init(self, *_: Any) -> None:
         return None
 
     def handle_call(self, state: None, body: Any) -> tuple[None, Any]:

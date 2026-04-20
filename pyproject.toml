@@ -17,6 +17,7 @@ build-backend = "hatchling.build"
 dev = [
     "hypothesis>=6.152.1",
     "orbis",
+    "pyright>=1.1.408",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
 ]

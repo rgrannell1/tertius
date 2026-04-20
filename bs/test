@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-uv run pytest -v "$@"
+uv run python3 -m pytest -v "$@"

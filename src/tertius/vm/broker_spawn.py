@@ -4,7 +4,7 @@ from typing import Any
 
 import zmq
 
-from tertius.constants import OK, READY
+from tertius.constants import OK, READY, SPAWN_READY_TIMEOUT_MS
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
@@ -50,7 +50,8 @@ def _await_ready(
     A 1s receive timeout lets us check if the child died without ever sending
     READY, which would otherwise block forever.
     """
-    router.setsockopt(zmq.RCVTIMEO, 1000)
+    router.setsockopt(zmq.RCVTIMEO, SPAWN_READY_TIMEOUT_MS)
+
     try:
         while True:
             try:
@@ -63,10 +64,14 @@ def _await_ready(
                         f"(exit code {proc.exitcode})"
                     )
                 continue
+
             child_requester, child_command = child_frames[0], child_frames[1]
+
             if child_command == READY and child_requester == bytes(new_pid):
+                # The child process is ready — reply to the original spawn requester and return.
                 reply(router, child_requester, OK)
                 break
+
             if child_command in handlers:
                 handlers[child_command](router, child_requester, child_frames)
     finally:

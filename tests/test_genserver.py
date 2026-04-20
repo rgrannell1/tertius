@@ -16,7 +16,7 @@ from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
 
 
 class Counter(GenServer[int]):
-    def init(self, initial: int = 0) -> int:
+    def init(self, initial: int = 0, *_: Any) -> int:
         return initial
 
     def handle_cast(self, state: int, body: Any) -> Generator[Any, Any, int]:
@@ -33,6 +33,7 @@ class Counter(GenServer[int]):
         match body:
             case "get":
                 return state, state
+        raise NotImplementedError(body)
         yield
 
 
@@ -55,7 +56,7 @@ def drive(server: GenServer, initial: Any, messages: list[Any]) -> list[Any]:
     try:
         complete(
             server.loop(initial),
-            receive=lambda _: inbox.pop(0),
+            receive=lambda effect: inbox.pop(0),
             send=lambda effect: sent.append(effect.body),
         )
     except IndexError:
@@ -180,7 +181,7 @@ def test_call_helper_returns_reply_body():
         assert isinstance(effect.body, CallMsg)
         ref_holder.append(effect.body.ref)
 
-    def stub_receive(_: EReceive) -> Envelope:
+    def stub_receive(effect: EReceive) -> Envelope:
         return Envelope(sender=SENDER, body=ReplyMsg(ref=ref_holder[0], body="pong"))
 
     result = complete(
@@ -200,7 +201,7 @@ def test_call_helper_ignores_non_matching_replies():
     def stub_send(effect: ESend) -> None:
         ref_holder.append(effect.body.ref)
 
-    def stub_receive(_: EReceive) -> Envelope:
+    def stub_receive(effect: EReceive) -> Envelope:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
@@ -226,7 +227,7 @@ def test_call_refs_are_unique():
     def stub_send(effect: ESend) -> None:
         refs.append(effect.body.ref)
 
-    def stub_receive(_: EReceive) -> Envelope:
+    def stub_receive(effect: EReceive) -> Envelope:
         return Envelope(sender=SENDER, body=ReplyMsg(ref=refs[-1], body=None))
 
     for _ in range(3):
@@ -248,7 +249,7 @@ def test_call_timeout_returns_reply_when_server_responds():
     def stub_send(effect: ESend) -> None:
         ref_holder.append(effect.body.ref)
 
-    def stub_receive_timeout(_: EReceiveTimeout) -> Envelope:
+    def stub_receive_timeout(effect: EReceiveTimeout) -> Envelope:
         return Envelope(sender=SENDER, body=ReplyMsg(ref=ref_holder[0], body="pong"))
 
     result = complete(
@@ -262,10 +263,10 @@ def test_call_timeout_returns_reply_when_server_responds():
 def test_call_timeout_returns_none_on_timeout():
     """Proves that call_timeout() returns None when no reply arrives within the deadline."""
 
-    def stub_send(_: ESend) -> None:
+    def stub_send(effect: ESend) -> None:
         pass
 
-    def stub_receive_timeout(_: EReceiveTimeout) -> None:
+    def stub_receive_timeout(effect: EReceiveTimeout) -> None:
         return None
 
     result = complete(

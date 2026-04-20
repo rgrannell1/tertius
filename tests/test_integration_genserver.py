@@ -15,7 +15,7 @@ from tertius.vm import run
 
 
 class Counter(GenServer[int]):
-    def init(self, initial: int = 0) -> int:
+    def init(self, initial: int = 0, *_: Any) -> int:
         return initial
 
     def handle_cast(self, state: int, body: Any) -> int:
@@ -29,6 +29,7 @@ class Counter(GenServer[int]):
         match body:
             case "get":
                 return state, state
+        raise NotImplementedError(body)
 
 
 def run_counter(initial: int) -> Generator[Any, Any, None]:

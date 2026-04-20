@@ -8,6 +8,7 @@ from orbis import complete
 
 from tertius.constants import READY
 from tertius.types import Pid
+from tertius.vm.broker_utils import ctrl_send
 from tertius.vm.messages import crash
 from tertius.vm.process_handlers import make_handlers
 
@@ -23,12 +24,10 @@ def _primed(gen: Any, ctrl: "zmq.Socket[bytes]") -> Any:
     try:
         effect = next(gen)
     except StopIteration:
-        ctrl.send_multipart([READY])
-        ctrl.recv_multipart()
+        ctrl_send(ctrl, READY)
         return
 
-    ctrl.send_multipart([READY])
-    ctrl.recv_multipart()
+    ctrl_send(ctrl, READY)
 
     pending_throw: BaseException | None = None
 
@@ -55,11 +54,10 @@ def _on_crash(pid: Pid, ctrl: "zmq.Socket[bytes]", err: Exception) -> None:
 
     print(f"[tertius] process {pid} crashed: {err}", file=sys.stderr, flush=True)
     traceback.print_exc(file=sys.stderr)
-    ctrl.send_multipart(crash.encode(err))
-    ctrl.recv_multipart()
+    ctrl_send(ctrl, *crash.encode(err))
 
 
-def _on_exit(dealer: "zmq.Socket[bytes]", ctrl: "zmq.Socket[bytes]", ctx: "zmq.Context[bytes]") -> None:
+def _on_exit(dealer: "zmq.Socket[bytes]", ctrl: "zmq.Socket[bytes]", ctx: "zmq.Context[zmq.Socket[bytes]]") -> None:
     """Process cleanup: close sockets and terminate context."""
 
     dealer.close()
@@ -68,7 +66,7 @@ def _on_exit(dealer: "zmq.Socket[bytes]", ctrl: "zmq.Socket[bytes]", ctx: "zmq.C
 
 
 def _connect_dealer(
-    ctx: "zmq.Context[bytes]", pid: Pid, addr: str
+    ctx: "zmq.Context[zmq.Socket[bytes]]", pid: Pid, addr: str
 ) -> "zmq.Socket[bytes]":
     """Connect a DEALER socket to the given address, using the PID as identity."""
 

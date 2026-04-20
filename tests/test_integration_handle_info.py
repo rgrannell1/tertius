@@ -15,7 +15,7 @@ from tertius.vm import run
 
 
 class Accumulator(GenServer[list]):
-    def init(self) -> list:
+    def init(self, *_: Any) -> list:
         return []
 
     def handle_info(self, state: list, body: Any) -> list:
@@ -25,6 +25,7 @@ class Accumulator(GenServer[list]):
         match body:
             case "get":
                 return state, state
+        raise NotImplementedError(body)
 
 
 def run_accumulator() -> Generator[Any, Any, None]:

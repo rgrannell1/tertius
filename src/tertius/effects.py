@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import Any, ClassVar, LiteralString
 
 from orbis import Effect, Event
 
@@ -10,7 +10,7 @@ from tertius.types import Envelope, Pid
 class ESpawn(Effect[Pid]):
     """Spawn a new process"""
 
-    tag: ClassVar[str] = "spawn"
+    tag: ClassVar[LiteralString] = "spawn"
     fn_name: str
     args: tuple[Any, ...] = field(default_factory=tuple)
 
@@ -19,14 +19,14 @@ class ESpawn(Effect[Pid]):
 class ESelf(Effect[Pid]):
     """The current process identifier"""
 
-    tag: ClassVar[str] = "self"
+    tag: ClassVar[LiteralString] = "self"
 
 
 @dataclass
 class ESend[BodyT](Event):
     """Send a message to a process"""
 
-    tag: ClassVar[str] = "send"
+    tag: ClassVar[LiteralString] = "send"
     pid: Pid
     body: BodyT
 
@@ -35,14 +35,14 @@ class ESend[BodyT](Event):
 class EReceive(Effect[Envelope]):
     """Receive a message from a process"""
 
-    tag: ClassVar[str] = "receive"
+    tag: ClassVar[LiteralString] = "receive"
 
 
 @dataclass
 class ERegister(Event):
     """Register a process name"""
 
-    tag: ClassVar[str] = "register"
+    tag: ClassVar[LiteralString] = "register"
     name: str
 
 
@@ -50,7 +50,7 @@ class ERegister(Event):
 class EWhereis(Effect[Pid | None]):
     """Lookup a process by name"""
 
-    tag: ClassVar[str] = "whereis"
+    tag: ClassVar[LiteralString] = "whereis"
     name: str
 
 
@@ -58,7 +58,7 @@ class EWhereis(Effect[Pid | None]):
 class ELink(Event):
     """Bidirectionally link to a process — if either crashes, the other dies too"""
 
-    tag: ClassVar[str] = "link"
+    tag: ClassVar[LiteralString] = "link"
     pid: Pid
 
 
@@ -66,7 +66,7 @@ class ELink(Event):
 class EMonitor(Event):
     """Monitor a process for crashes"""
 
-    tag: ClassVar[str] = "monitor"
+    tag: ClassVar[LiteralString] = "monitor"
     pid: Pid
 
 
@@ -74,7 +74,7 @@ class EMonitor(Event):
 class EReceiveTimeout(Effect[Envelope | None]):
     """Receive a message, or None if timeout_ms elapses first."""
 
-    tag: ClassVar[str] = "receive_timeout"
+    tag: ClassVar[LiteralString] = "receive_timeout"
     timeout_ms: int
 
 
@@ -82,7 +82,7 @@ class EReceiveTimeout(Effect[Envelope | None]):
 class ESleep(Effect[None]):
     """Suspend the process for ms milliseconds."""
 
-    tag: ClassVar[str] = "sleep"
+    tag: ClassVar[LiteralString] = "sleep"
     ms: int
 
 
@@ -90,7 +90,7 @@ class ESleep(Effect[None]):
 class EEmit[BodyT](Event):
     """Emit an event to the caller of run()."""
 
-    tag: ClassVar[str] = "emit"
+    tag: ClassVar[LiteralString] = "emit"
     body: BodyT
 
 
@@ -98,5 +98,5 @@ class EEmit[BodyT](Event):
 class EKill(Event):
     """Terminate a process — delivers ProcessCrash to its monitors."""
 
-    tag: ClassVar[str] = "kill"
+    tag: ClassVar[LiteralString] = "kill"
     pid: Pid

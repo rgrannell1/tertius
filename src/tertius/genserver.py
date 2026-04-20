@@ -33,7 +33,8 @@ class GenServer[StateT]:
         state = self.init(*args)
 
         while True:
-            envelope: Envelope = yield EReceive()
+            envelope = yield EReceive()
+            assert envelope is not None
 
             match envelope.body:
                 case CastMsg(body=body):
@@ -64,7 +65,8 @@ def mcall(pid: Pid, body: Any) -> Generator[ESend | EReceive, None | Envelope, A
     yield ESend(pid, CallMsg(ref=ref, body=body))
 
     while True:
-        envelope: Envelope = yield EReceive()
+        envelope = yield EReceive()
+        assert envelope is not None
 
         if isinstance(envelope.body, ReplyMsg) and envelope.body.ref == ref:
             return envelope.body.body

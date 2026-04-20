@@ -7,7 +7,7 @@ changing the worker logic.
 """
 
 from dataclasses import dataclass
-from typing import Any, ClassVar, Generator
+from typing import Any, ClassVar, Generator, LiteralString
 
 from orbis import Effect, Event, handle
 
@@ -43,7 +43,7 @@ MSG_STOP = "stop"
 class EEncode(Effect[bytes]):
     """Encode the image at path, returning the encoded bytes."""
 
-    tag: ClassVar[str] = "encode"
+    tag: ClassVar[LiteralString] = "encode"
     path: str
 
 
@@ -51,7 +51,7 @@ class EEncode(Effect[bytes]):
 class EWriteDB(Event):
     """Write encoded image bytes to the database."""
 
-    tag: ClassVar[str] = "write_db"
+    tag: ClassVar[LiteralString] = "write_db"
     path: str
     data: bytes
 
@@ -71,7 +71,8 @@ def handle_write_db(effect: EWriteDB) -> None:
 
 
 def process_photo(path: str) -> Generator[EEncode | EWriteDB, bytes | None, None]:
-    data: bytes = yield EEncode(path)
+    data = yield EEncode(path)
+    assert data is not None
     yield EWriteDB(path=path, data=data)
 
 

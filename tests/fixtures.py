@@ -2,7 +2,7 @@
 
 from collections.abc import Generator
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, LiteralString
 
 from orbis import Effect, complete
 
@@ -13,13 +13,13 @@ from tertius.types import Envelope, Pid
 
 @dataclass
 class EMarco(Effect[int]):
-    tag: ClassVar[str] = "marco"
+    tag: ClassVar[LiteralString] = "marco"
     count: int
 
 
 @dataclass
 class EPolo(Effect[int]):
-    tag: ClassVar[str] = "polo"
+    tag: ClassVar[LiteralString] = "polo"
     count: int
 
 

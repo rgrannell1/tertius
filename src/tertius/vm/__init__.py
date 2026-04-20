@@ -19,7 +19,7 @@ class VM:
         vm_pid = os.getpid()
         self._broker_addr = f"ipc:///tmp/tertius-{vm_pid}-data.sock"
         self._ctrl_addr = f"ipc:///tmp/tertius-{vm_pid}-ctrl.sock"
-        self._ctx: zmq.Context[bytes] = zmq.Context()
+        self._ctx: zmq.Context[zmq.Socket[bytes]] = zmq.Context()
         self._broker = Broker(self._broker_addr, self._ctrl_addr, self._ctx, scope)
 
     def start(
@@ -30,7 +30,7 @@ class VM:
         self._broker.ready.wait()
 
         root_pid = self._broker.alloc_pid()
-        ctx: zmq.Context[bytes] = zmq.Context()
+        ctx: zmq.Context[zmq.Socket[bytes]] = zmq.Context()
 
         dealer: zmq.Socket[bytes] = ctx.socket(zmq.DEALER)
         dealer.identity = bytes(root_pid)

@@ -6,6 +6,7 @@ from typing import Any
 import zmq
 
 from tertius.constants import ERROR
+from tertius.vm.broker_utils import ctrl_send
 from tertius.effects import (
     EEmit,
     EKill,
@@ -63,14 +64,14 @@ def _handle_send(dealer: "zmq.Socket[bytes]", pid: Pid, effect: ESend) -> None:
 def _handle_link(ctrl: "zmq.Socket[bytes]", effect: ELink) -> None:
     """Link the current process to the target PID by sending a message to the broker."""
 
-    ctrl.send_multipart(link.encode(effect.pid))
-    ctrl.recv_multipart()
+    ctrl_send(ctrl, *link.encode(effect.pid))
 
 
 def _handle_receive(dealer: "zmq.Socket[bytes]", _effect: EReceive) -> Envelope:
     """Wait for a message and return it as an Envelope."""
 
     env = envelope.decode(dealer.recv_multipart())
+
     if isinstance(env.body, LinkedCrash):
         raise env.body
     return env
@@ -79,8 +80,7 @@ def _handle_receive(dealer: "zmq.Socket[bytes]", _effect: EReceive) -> Envelope:
 def _handle_register(ctrl: "zmq.Socket[bytes]", effect: ERegister) -> None:
     """Register the current process under the given name by sending a message to the broker."""
 
-    ctrl.send_multipart(register.encode(effect.name))
-    ctrl.recv_multipart()
+    ctrl_send(ctrl, *register.encode(effect.name))
 
 
 def _handle_whereis(ctrl: "zmq.Socket[bytes]", effect: EWhereis) -> Pid | None:
@@ -112,8 +112,7 @@ def _handle_receive_timeout(
 def _handle_monitor(ctrl: "zmq.Socket[bytes]", effect: EMonitor) -> None:
     """Notify the broker that this process wants to monitor the target PID"""
 
-    ctrl.send_multipart(monitor.encode(effect.pid))
-    ctrl.recv_multipart()
+    ctrl_send(ctrl, *monitor.encode(effect.pid))
 
 
 def _handle_sleep(effect: ESleep) -> None:
@@ -125,15 +124,13 @@ def _handle_sleep(effect: ESleep) -> None:
 def _handle_emit(ctrl: "zmq.Socket[bytes]", effect: EEmit) -> None:
     """Emit an event by sending it to the broker"""
 
-    ctrl.send_multipart(emit.encode(effect.body))
-    ctrl.recv_multipart()
+    ctrl_send(ctrl, *emit.encode(effect.body))
 
 
 def _handle_kill(ctrl: "zmq.Socket[bytes]", effect: EKill) -> None:
     """Kill the target process by sending a kill signal to the broker"""
 
-    ctrl.send_multipart(kill.encode(effect.pid))
-    ctrl.recv_multipart()
+    ctrl_send(ctrl, *kill.encode(effect.pid))
 
 
 def make_handlers(
