@@ -72,7 +72,11 @@ class Broker:
     """
 
     def __init__(
-        self, broker_addr: str, ctrl_addr: str, ctx: "zmq.Context[zmq.Socket[bytes]]", scope: Scope
+        self,
+        broker_addr: str,
+        ctrl_addr: str,
+        ctx: "zmq.Context[zmq.Socket[bytes]]",
+        scope: Scope,
     ) -> None:
         self._broker_addr = broker_addr
         self._ctrl_addr = ctrl_addr

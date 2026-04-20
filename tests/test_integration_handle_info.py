@@ -1,35 +1,35 @@
-"""Integration tests for GenServer.handle_info — non-call/cast message handling."""
+"""Integration tests for handle_info — non-call/cast message handling."""
 
 from collections.abc import Generator
 from typing import Any
 
 from tertius.effects import EEmit, ESend, ESpawn
-from tertius.genserver import GenServer, mcall
+from tertius.genserver import gen_server, mcall
 from tertius.types import Pid
 from tertius.vm import run
 
 
 # ---------------------------------------------------------------------------
-# Accumulator GenServer — collects raw messages via handle_info
+# Accumulator process — collects raw messages via handle_info
 # ---------------------------------------------------------------------------
 
 
-class Accumulator(GenServer[list]):
-    def init(self, *_: Any) -> list:
-        return []
+def _accumulator_call(state: list, body: Any) -> tuple[list, list]:
+    match body:
+        case "get":
+            return state, state
+    raise NotImplementedError(body)
 
-    def handle_info(self, state: list, body: Any) -> list:
-        return state + [body]
 
-    def handle_call(self, state: list, body: Any) -> tuple[list, list]:
-        match body:
-            case "get":
-                return state, state
-        raise NotImplementedError(body)
+accumulator = gen_server(
+    init=lambda *_: [],
+    handle_info=lambda state, body: state + [body],
+    handle_call=_accumulator_call,
+)
 
 
 def run_accumulator() -> Generator[Any, Any, None]:
-    yield from Accumulator().loop()
+    yield from accumulator()
 
 
 _SCOPE = {"run_accumulator": run_accumulator}

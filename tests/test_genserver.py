@@ -1,40 +1,40 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Any
 
 from hypothesis import given
 from hypothesis import strategies as st
 from orbis import complete
 
-from tertius.genserver import GenServer, mcall, mcall_timeout, mcast
+from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
 from tertius.effects import EReceive, EReceiveTimeout, ESend
 from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
 
 
 # ---------------------------------------------------------------------------
-# A minimal Counter GenServer used across all tests
+# A minimal counter process used across all tests
 # ---------------------------------------------------------------------------
 
 
-class Counter(GenServer[int]):
-    def init(self, initial: int = 0, *_: Any) -> int:
-        return initial
+def _init(initial: int = 0) -> int:
+    return initial
 
-    def handle_cast(self, state: int, body: Any) -> Generator[Any, Any, int]:
-        match body:
-            case ("inc", n):
-                return state + n
-            case _:
-                return state
-        yield
 
-    def handle_call(
-        self, state: int, body: Any
-    ) -> Generator[Any, Any, tuple[int, Any]]:
-        match body:
-            case "get":
-                return state, state
-        raise NotImplementedError(body)
-        yield
+def _cast(state: int, body: Any) -> int:
+    match body:
+        case ("inc", n):
+            return state + n
+        case _:
+            return state
+
+
+def _call(state: int, body: Any) -> tuple[int, Any]:
+    match body:
+        case "get":
+            return state, state
+    raise NotImplementedError(body)
+
+
+counter = gen_server(init=_init, handle_cast=_cast, handle_call=_call)
 
 
 # ---------------------------------------------------------------------------
@@ -44,8 +44,10 @@ class Counter(GenServer[int]):
 SENDER = Pid(99)
 
 
-def drive(server: GenServer, initial: Any, messages: list[Any]) -> list[Any]:
-    """Drive a GenServer loop with a fixed sequence of messages.
+def drive(
+    server: Callable[..., Generator], initial: Any, messages: list[Any]
+) -> list[Any]:
+    """Drive a gen_server loop with a fixed sequence of messages.
 
     Returns whatever the server sent back. Stops cleanly when messages run out.
     """
@@ -55,7 +57,7 @@ def drive(server: GenServer, initial: Any, messages: list[Any]) -> list[Any]:
 
     try:
         complete(
-            server.loop(initial),
+            server(initial),
             receive=lambda effect: inbox.pop(0),
             send=lambda effect: sent.append(effect.body),
         )
@@ -73,7 +75,7 @@ def drive(server: GenServer, initial: Any, messages: list[Any]) -> list[Any]:
 def test_init_sets_initial_state():
     """Proves that State from a get call immediately after init equals the initial value."""
 
-    sent = drive(Counter(), 42, [CallMsg(ref=0, body="get")])
+    sent = drive(counter, 42, [CallMsg(ref=0, body="get")])
     assert sent == [ReplyMsg(ref=0, body=42)]
 
 
@@ -87,7 +89,7 @@ def test_single_increment(n):
     """Proves that increment message cast updates state by the correct amount."""
 
     sent = drive(
-        Counter(),
+        counter,
         0,
         [
             CastMsg(body=("inc", n)),
@@ -104,7 +106,7 @@ def test_increments_accumulate(increments):
     messages = [CastMsg(body=("inc", n)) for n in increments] + [
         CallMsg(ref=0, body="get")
     ]
-    sent = drive(Counter(), 0, messages)
+    sent = drive(counter, 0, messages)
     assert sent == [ReplyMsg(ref=0, body=sum(increments))]
 
 
@@ -112,7 +114,7 @@ def test_unknown_cast_leaves_state_unchanged():
     """Proves that an unrecognised cast body does not change state."""
 
     sent = drive(
-        Counter(),
+        counter,
         7,
         [
             CastMsg(body="unknown"),
@@ -130,7 +132,7 @@ def test_unknown_cast_leaves_state_unchanged():
 def test_call_reply_matches_state():
     """Proves that the reply from a get call equals the current state."""
 
-    sent = drive(Counter(), 5, [CallMsg(ref=1, body="get")])
+    sent = drive(counter, 5, [CallMsg(ref=1, body="get")])
     assert sent == [ReplyMsg(ref=1, body=5)]
 
 
@@ -138,7 +140,7 @@ def test_call_ref_is_preserved():
     """Proves that ReplyMsg carries the same ref as the CallMsg that triggered it."""
 
     ref = 12345
-    sent = drive(Counter(), 0, [CallMsg(ref=ref, body="get")])
+    sent = drive(counter, 0, [CallMsg(ref=ref, body="get")])
     assert sent[0].ref == ref
 
 
@@ -146,7 +148,7 @@ def test_state_unchanged_after_call():
     """Proves two gets are idempotent"""
 
     sent = drive(
-        Counter(),
+        counter,
         3,
         [
             CallMsg(ref=0, body="get"),

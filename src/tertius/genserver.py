@@ -1,5 +1,5 @@
 import inspect
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from itertools import count
 from typing import Any
 
@@ -9,28 +9,21 @@ from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
 _ref_counter = count()
 
 
-class GenServer[StateT]:
-    """Base class for stateful processes. Subclass this to implement a process."""
+def gen_server[StateT](
+    init: Callable[..., StateT],
+    *,
+    handle_cast: Callable[[StateT, Any], Any] | None = None,
+    handle_call: Callable[[StateT, Any], Any] | None = None,
+    handle_info: Callable[[StateT, Any], Any] | None = None,
+) -> Callable[..., Generator[EReceive | ESend, Envelope | None, None]]:
+    """Build a stateful process loop from handler functions.
 
-    def init(self, *args: Any) -> StateT:
-        raise NotImplementedError
+    Returns a callable that, when called with init args, yields a generator
+    suitable for running inside a tertius process.
+    """
 
-    def handle_cast(self, state: StateT, body: Any) -> Any:
-        """Handle a cast message. Return the new state, or yield effects then return it."""
-        return state
-
-    def handle_call(self, state: StateT, body: Any) -> Any:
-        """Handle a call message. Return (new_state, reply), or yield effects then return it."""
-        raise NotImplementedError
-
-    def handle_info(self, state: StateT, body: Any) -> Any:
-        """Handle any message that isn't a cast or call. Return the new state."""
-        return state
-
-    def loop(self, *args: Any) -> Generator[EReceive | ESend, Envelope | None, None]:
-        """The main loop for the process. Receive messages, and handle them appropriately."""
-
-        state = self.init(*args)
+    def loop(*args: Any) -> Generator[EReceive | ESend, Envelope | None, None]:
+        state = init(*args)
 
         while True:
             envelope = yield EReceive()
@@ -38,23 +31,33 @@ class GenServer[StateT]:
 
             match envelope.body:
                 case CastMsg(body=body):
-                    result = self.handle_cast(state, body)
-                    state = (
-                        (yield from result) if inspect.isgenerator(result) else result
-                    )
+                    if handle_cast is not None:
+                        result = handle_cast(state, body)
+                        state = (
+                            (yield from result)
+                            if inspect.isgenerator(result)
+                            else result
+                        )
 
                 case CallMsg(ref=ref, body=body):
-                    result = self.handle_call(state, body)
+                    if handle_call is None:
+                        raise NotImplementedError("no handle_call registered")
+                    result = handle_call(state, body)
                     state, reply = (
                         (yield from result) if inspect.isgenerator(result) else result
                     )
                     yield ESend(envelope.sender, ReplyMsg(ref=ref, body=reply))
 
                 case _:
-                    result = self.handle_info(state, envelope.body)
-                    state = (
-                        (yield from result) if inspect.isgenerator(result) else result
-                    )
+                    if handle_info is not None:
+                        result = handle_info(state, envelope.body)
+                        state = (
+                            (yield from result)
+                            if inspect.isgenerator(result)
+                            else result
+                        )
+
+    return loop
 
 
 def mcall(pid: Pid, body: Any) -> Generator[ESend | EReceive, None | Envelope, Any]:

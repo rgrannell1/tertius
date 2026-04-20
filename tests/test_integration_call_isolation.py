@@ -3,27 +3,25 @@
 from collections.abc import Generator
 from typing import Any
 
-from tertius.genserver import GenServer, mcall, mcast
+from tertius.genserver import gen_server, mcall, mcast
 from tertius.effects import EEmit, EReceive, ESelf, ESpawn
 from tertius.types import CastMsg, Envelope, Pid
 from tertius.vm import run
 
 
 # ---------------------------------------------------------------------------
-# Echo GenServer — replies with whatever body it receives
+# Echo process — replies with whatever body it receives
 # ---------------------------------------------------------------------------
 
 
-class Echo(GenServer[None]):
-    def init(self, *_: Any) -> None:
-        return None
-
-    def handle_call(self, state: None, body: Any) -> tuple[None, Any]:
-        return state, body
+echo = gen_server(
+    init=lambda *_: None,
+    handle_call=lambda state, body: (state, body),
+)
 
 
 def run_echo() -> Generator[Any, Any, None]:
-    yield from Echo().loop()
+    yield from echo()
 
 
 # ---------------------------------------------------------------------------

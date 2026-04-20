@@ -1,39 +1,43 @@
-"""Integration tests for GenServer over real ZMQ processes."""
+"""Integration tests for gen_server over real ZMQ processes."""
 
 from collections.abc import Generator
 from typing import Any
 
-from tertius.genserver import GenServer, mcall, mcall_timeout, mcast
+from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
 from tertius.effects import EEmit, ESpawn
 from tertius.types import Pid
 from tertius.vm import run
 
 
 # ---------------------------------------------------------------------------
-# Counter GenServer
+# Counter process
 # ---------------------------------------------------------------------------
 
 
-class Counter(GenServer[int]):
-    def init(self, initial: int = 0, *_: Any) -> int:
-        return initial
+def _init(initial: int = 0) -> int:
+    return initial
 
-    def handle_cast(self, state: int, body: Any) -> int:
-        match body:
-            case ("inc", n):
-                return state + n
-            case _:
-                return state
 
-    def handle_call(self, state: int, body: Any) -> tuple[int, int]:
-        match body:
-            case "get":
-                return state, state
-        raise NotImplementedError(body)
+def _cast(state: int, body: Any) -> int:
+    match body:
+        case ("inc", n):
+            return state + n
+        case _:
+            return state
+
+
+def _call(state: int, body: Any) -> tuple[int, int]:
+    match body:
+        case "get":
+            return state, state
+    raise NotImplementedError(body)
+
+
+counter = gen_server(init=_init, handle_cast=_cast, handle_call=_call)
 
 
 def run_counter(initial: int) -> Generator[Any, Any, None]:
-    yield from Counter().loop(initial)
+    yield from counter(initial)
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +83,7 @@ _SCOPE = {"run_counter": run_counter}
 
 
 def test_cast_accumulates_state_across_processes():
-    """Proves that cast messages mutate GenServer state in a real process."""
+    """Proves that cast messages mutate gen_server state in a real process."""
 
     result = next(run(_root_cast_then_call, scope=_SCOPE))
     assert result == 8

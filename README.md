@@ -26,13 +26,24 @@ Each process gets two `DEALER` sockets (with their PID as their ID).
 
 A `notifier` socket is to announce processes were killed / crashed on behalf of the dead processes.
 
-`GenServer` is a user-interface wrapping the lower level transport details. It's a class that has three handlers to be implemented:
+`gen_server` is a user-interface wrapping the lower level transport details. It takes plain handler functions and returns a process loop factory:
 
-- `handle_cast`: handle fire and forget messages, return our new state
-- `handle_call`: handle request/reply messages, return our new state and a reply
-- `handle_info`: for any other category of message
+- `handle_cast`: handle fire-and-forget messages, return new state
+- `handle_call`: handle request/reply messages, return `(new_state, reply)`
+- `handle_info`: handle any other message category, return new state
 
-It abstracts away the zeromq details and allows processes to focus on what sending and receiving application messages.
+```python
+counter = gen_server(
+    init=lambda initial=0: initial,
+    handle_cast=lambda state, body: state + body[1] if body[0] == "inc" else state,
+    handle_call=lambda state, body: (state, state) if body == "get" else ...,
+)
+
+# inside a process:
+yield from counter(0)
+```
+
+It abstracts away the ZMQ details so processes focus purely on application messages.
 
 ## Effects
 

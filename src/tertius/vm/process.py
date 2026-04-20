@@ -13,7 +13,6 @@ from tertius.vm.messages import crash
 from tertius.vm.process_handlers import make_handlers
 
 
-
 def _primed(gen: Any, ctrl: "zmq.Socket[bytes]") -> Any:
     """Wrap a generator so READY is sent only after it survives its first step.
 
@@ -57,7 +56,11 @@ def _on_crash(pid: Pid, ctrl: "zmq.Socket[bytes]", err: Exception) -> None:
     ctrl_send(ctrl, *crash.encode(err))
 
 
-def _on_exit(dealer: "zmq.Socket[bytes]", ctrl: "zmq.Socket[bytes]", ctx: "zmq.Context[zmq.Socket[bytes]]") -> None:
+def _on_exit(
+    dealer: "zmq.Socket[bytes]",
+    ctrl: "zmq.Socket[bytes]",
+    ctx: "zmq.Context[zmq.Socket[bytes]]",
+) -> None:
     """Process cleanup: close sockets and terminate context."""
 
     dealer.close()

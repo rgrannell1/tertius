@@ -93,7 +93,7 @@ def _handle_whereis(ctrl: "zmq.Socket[bytes]", effect: EWhereis) -> Pid | None:
 def _handle_receive_timeout(
     dealer: "zmq.Socket[bytes]", effect: EReceiveTimeout
 ) -> "Envelope | None":
-    """"Wait for a message with a timeout; return None if the timeout expires."""
+    """ "Wait for a message with a timeout; return None if the timeout expires."""
 
     poller = zmq.Poller()
     poller.register(dealer, zmq.POLLIN)

@@ -1,4 +1,4 @@
-from tertius.genserver import GenServer, mcall, mcall_timeout, mcast
+from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
 from tertius.effects import (
     EEmit,
     EKill,
@@ -35,7 +35,7 @@ __all__ = [
     "ESleep",
     "ESpawn",
     "EWhereis",
-    "GenServer",
+    "gen_server",
     "Pid",
     "ProcessCrash",
     "ReplyMsg",
