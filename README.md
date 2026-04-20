@@ -42,18 +42,44 @@ A `notifier` socket is to announce processes were killed / crashed on behalf of 
 - `handle_call`: handle request/reply messages, return `(new_state, reply)`
 - `handle_info`: handle any other message category, return new state
 
-```python
-counter = gen_server(
-    init=lambda initial=0: initial,
-    handle_cast=lambda state, body: state + body[1] if body[0] == "inc" else state,
-    handle_call=lambda state, body: (state, state) if body == "get" else ...,
-)
+It abstracts away the ZMQ details so processes focus purely on application messages.
 
-# inside a process:
-yield from counter(0)
+## Example
+
+```python
+def init(initial: int = 0) -> int:
+    return initial
+
+def handle_cast(state: int, body: Any) -> int:
+    match body:
+        case ("inc", n):
+            return state + n
+        case _:
+            return state
+
+def handle_call(state: int, body: Any) -> tuple[int, Any]:
+    match body:
+        case "get":
+            return state, state
+    raise NotImplementedError(body)
+
+# serv handling incrementing on request
+count_server = gen_server(init=init, handle_cast=handle_cast, handle_call=handle_call)
+
+def supervisor() -> Generator:
+    counter_pid = yield ESpawn("count_server", args=(0,))
+
+    yield from mcast(counter_pid, ("inc", 1))
+    yield from mcast(counter_pid, ("inc", 4))
+
+    value = yield from mcall(counter_pid, "get")
+    yield from EEmit(value)
+
+
+for event in run(supervisor, scope={"count_server": count_server}):
+    print(event)  # 5
 ```
 
-It abstracts away the ZMQ details so processes focus purely on application messages.
 
 ## Effects
 
