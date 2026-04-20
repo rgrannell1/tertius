@@ -13,7 +13,13 @@ from tertius.effects import (
     ESpawn,
     EWhereis,
 )
-from tertius.exceptions import DeadProcess, LinkedCrash, NormalExit, ProcessCrash, TertiusError
+from tertius.exceptions import (
+    DeadProcess,
+    LinkedCrash,
+    NormalExit,
+    ProcessCrash,
+    TertiusError,
+)
 from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
 from tertius.vm import Scope, run
 

@@ -1,7 +1,7 @@
 import inspect
 from collections.abc import Callable, Generator
 from itertools import count
-from typing import Any
+from typing import Any, cast
 
 from tertius.effects import EReceive, EReceiveTimeout, ESend
 from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
@@ -12,9 +12,13 @@ _ref_counter = count()
 def gen_server[StateT](
     init: Callable[..., StateT],
     *,
-    handle_cast: Callable[[StateT, Any], Any] | None = None,
-    handle_call: Callable[[StateT, Any], Any],
-    handle_info: Callable[[StateT, Any], Any] | None = None,
+    handle_cast: Callable[[StateT, Any], StateT | Generator[Any, Any, StateT]]
+    | None = None,
+    handle_call: Callable[
+        [StateT, Any], tuple[StateT, Any] | Generator[Any, Any, tuple[StateT, Any]]
+    ],
+    handle_info: Callable[[StateT, Any], StateT | Generator[Any, Any, StateT]]
+    | None = None,
 ) -> Callable[..., Generator[EReceive | ESend, Envelope | None, None]]:
     """Build a stateful process loop from handler functions.
 
@@ -34,26 +38,29 @@ def gen_server[StateT](
                 case CastMsg(body=body):
                     if handle_cast is not None:
                         result = handle_cast(state, body)
-                        state = (
+                        state = cast(
+                            StateT,
                             (yield from result)
                             if inspect.isgenerator(result)
-                            else result
+                            else result,
                         )
 
                 case CallMsg(ref=ref, body=body):
                     result = handle_call(state, body)
-                    state, reply = (
-                        (yield from result) if inspect.isgenerator(result) else result
+                    state, reply = cast(
+                        tuple[StateT, Any],
+                        (yield from result) if inspect.isgenerator(result) else result,
                     )
                     yield ESend(envelope.sender, ReplyMsg(ref=ref, body=reply))
 
                 case _:
                     if handle_info is not None:
                         result = handle_info(state, envelope.body)
-                        state = (
+                        state = cast(
+                            StateT,
                             (yield from result)
                             if inspect.isgenerator(result)
-                            else result
+                            else result,
                         )
 
     return loop
