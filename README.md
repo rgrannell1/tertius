@@ -7,12 +7,21 @@ An effects-based multiprocessing runtime for Python, inspired by Erlang. Tertius
 
 
 ```
-effects.py      effects for intercommunication
-genserver.py    a minimal server that receives and sends messages
+effects.py               effects for intercommunication
+genserver.py             a minimal server that receives and sends messages
+constants.py             project-wide constants
+exceptions.py            exception types
+types.py                 shared type definitions
 vm/
-  broker.py     VM runtime; allocates pids, routes messages, handles control operations, tracks state.
-  messages.py   IPC message encoding.
-  process.py    process-level handlers.
+  broker.py              VM entry-point; event loop over broker and control sockets
+  broker_crash.py        crash/kill/link propagation logic
+  broker_handlers.py     control-message handlers (spawn, register, whereis, link, monitor)
+  broker_spawn.py        process spawning helpers
+  broker_state.py        mutable VM state (pid registry, links, monitors)
+  broker_utils.py        low-level ZMQ reply helpers
+  messages.py            IPC message encoding
+  process.py             process bootstrap and effect dispatch loop
+  process_handlers.py    per-effect handlers run inside a process
 ```
 
 ## Topology

@@ -29,24 +29,19 @@ def _primed(gen: Any, ctrl: "zmq.Socket[bytes]") -> Any:
 
     ctrl_send(ctrl, READY)
 
-    pending_throw: BaseException | None = None
-
     while True:
         try:
             send_val = yield effect
-            pending_throw = None
         except BaseException as exc:
-            send_val = None
-            pending_throw = exc
-        try:
-            if pending_throw is not None:
-                effect = gen.throw(
-                    type(pending_throw), pending_throw, pending_throw.__traceback__
-                )
-            else:
+            try:
+                effect = gen.throw(exc)
+            except StopIteration:
+                return
+        else:
+            try:
                 effect = gen.send(send_val)
-        except StopIteration:
-            return
+            except StopIteration:
+                return
 
 
 def _on_normal_exit(pid: Pid, ctrl: "zmq.Socket[bytes]") -> None:
