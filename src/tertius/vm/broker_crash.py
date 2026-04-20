@@ -41,7 +41,9 @@ def _notify_links(
 
     for peer in state.links.pop(pid, []):
         if peer in state.links:
-            state.links[peer] = [linked for linked in state.links[peer] if linked != pid]
+            state.links[peer] = [
+                linked for linked in state.links[peer] if linked != pid
+            ]
         notifier.send_multipart(encode_linked_crash_notification(peer, pid, kill_msg))
 
 

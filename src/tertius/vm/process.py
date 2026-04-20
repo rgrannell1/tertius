@@ -179,7 +179,9 @@ def _primed(gen: Any, ctrl: "zmq.Socket[bytes]") -> Any:
             pending_throw = exc
         try:
             if pending_throw is not None:
-                effect = gen.throw(type(pending_throw), pending_throw, pending_throw.__traceback__)
+                effect = gen.throw(
+                    type(pending_throw), pending_throw, pending_throw.__traceback__
+                )
             else:
                 effect = gen.send(send_val)
         except StopIteration:

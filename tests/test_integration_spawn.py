@@ -41,7 +41,9 @@ def _root_spawn_and_emit() -> Generator[Any, Any, None]:
 def test_spawn_starts_process_successfully():
     """Proves ESpawn starts a process that runs to completion."""
 
-    result = next(run(_root_spawn_and_emit, scope={"immediate_return": immediate_return}))
+    result = next(
+        run(_root_spawn_and_emit, scope={"immediate_return": immediate_return})
+    )
     assert result == "done"
 
 

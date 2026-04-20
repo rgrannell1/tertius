@@ -44,7 +44,9 @@ def make_ctrl_handlers(
     """Factory for control command handlers"""
 
     handlers: dict[bytes, Callable[..., None]] = {}
-    handlers[SPAWN] = partial(handle_spawn, alloc_pid, scope, broker_addr, ctrl_addr, state, handlers)
+    handlers[SPAWN] = partial(
+        handle_spawn, alloc_pid, scope, broker_addr, ctrl_addr, state, handlers
+    )
     handlers[REGISTER] = partial(handle_register, state)
     handlers[WHEREIS] = partial(handle_whereis, state)
     handlers[LINK] = partial(handle_link, state, notifier)
@@ -132,8 +134,12 @@ class Broker:
         router.bind(self._ctrl_addr)
 
         handlers = make_ctrl_handlers(
-            self.alloc_pid, self._scope, self._broker_addr, self._ctrl_addr,
-            self._state, notifier,
+            self.alloc_pid,
+            self._scope,
+            self._broker_addr,
+            self._ctrl_addr,
+            self._state,
+            notifier,
         )
 
         while True:
