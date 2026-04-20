@@ -7,6 +7,7 @@ import zmq
 from orbis import complete
 
 from tertius.constants import READY
+from tertius.exceptions import NormalExit
 from tertius.types import Pid
 from tertius.vm.broker_utils import ctrl_send
 from tertius.vm.messages import crash
@@ -46,6 +47,10 @@ def _primed(gen: Any, ctrl: "zmq.Socket[bytes]") -> Any:
                 effect = gen.send(send_val)
         except StopIteration:
             return
+
+
+def _on_normal_exit(pid: Pid, ctrl: "zmq.Socket[bytes]") -> None:
+    ctrl_send(ctrl, *crash.encode(NormalExit(pid)))
 
 
 def _on_crash(pid: Pid, ctrl: "zmq.Socket[bytes]", err: Exception) -> None:
@@ -97,6 +102,7 @@ def process_entry(
     try:
         fn = scope[fn_name]
         complete(_primed(fn(*args), ctrl), **make_handlers(pid, dealer, ctrl))
+        _on_normal_exit(pid, ctrl)
     except Exception as err:
         _on_crash(pid, ctrl, err)
     finally:

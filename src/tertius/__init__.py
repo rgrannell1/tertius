@@ -13,7 +13,7 @@ from tertius.effects import (
     ESpawn,
     EWhereis,
 )
-from tertius.exceptions import DeadProcess, LinkedCrash, ProcessCrash, TertiusError
+from tertius.exceptions import DeadProcess, LinkedCrash, NormalExit, ProcessCrash, TertiusError
 from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
 from tertius.vm import Scope, run
 
@@ -22,6 +22,7 @@ __all__ = [
     "CastMsg",
     "DeadProcess",
     "LinkedCrash",
+    "NormalExit",
     "Envelope",
     "EEmit",
     "EKill",

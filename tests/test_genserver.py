@@ -1,6 +1,7 @@
 from collections.abc import Callable, Generator
 from typing import Any
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 from orbis import complete
@@ -156,6 +157,42 @@ def test_state_unchanged_after_call():
         ],
     )
     assert sent[0].body == sent[1].body == 3
+
+
+# ---------------------------------------------------------------------------
+# handler exceptions
+# ---------------------------------------------------------------------------
+
+
+def test_handle_cast_exception_propagates():
+    """Proves that an exception raised in handle_cast propagates out of the loop."""
+
+    def _exploding_cast(state: int, body: Any) -> int:
+        raise ValueError("cast exploded")
+
+    server = gen_server(
+        init=lambda *_: 0,
+        handle_cast=_exploding_cast,
+        handle_call=lambda state, body: (state, state),
+    )
+
+    with pytest.raises(ValueError, match="cast exploded"):
+        drive(server, 0, [CastMsg(body="anything")])
+
+
+def test_handle_call_exception_propagates():
+    """Proves that an exception raised in handle_call propagates out of the loop."""
+
+    def _exploding_call(state: int, body: Any) -> tuple[int, Any]:
+        raise RuntimeError("call exploded")
+
+    server = gen_server(
+        init=lambda *_: 0,
+        handle_call=_exploding_call,
+    )
+
+    with pytest.raises(RuntimeError, match="call exploded"):
+        drive(server, 0, [CallMsg(ref=0, body="anything")])
 
 
 # ---------------------------------------------------------------------------

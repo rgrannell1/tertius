@@ -31,6 +31,20 @@ class LinkedCrash(TertiusError):
         return (self.__class__, (self.pid, self.reason))
 
 
+class NormalExit(TertiusError):
+    """Reason delivered to monitors when a process exits cleanly.
+
+    Links are not notified — matching Erlang's :normal exit semantics.
+    """
+
+    def __init__(self, pid: Pid) -> None:
+        self.pid = pid
+        super().__init__(f"Process {pid} exited normally")
+
+    def __reduce__(self) -> tuple:
+        return (self.__class__, (self.pid,))
+
+
 class DeadProcess(TertiusError):
     """A process that has exited"""
 

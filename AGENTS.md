@@ -18,4 +18,4 @@
 - Add short descriptions to each file of the intent of the contents
 - Factor out shared test setup code to a conftest.py
 - Factor out types to <module_name>_types.py
-- Avoid using python lambdas, except in .sort()
+- Avoid using python lambdas, except in .sort(). never use multiple lambdas in one call

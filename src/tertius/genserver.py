@@ -13,7 +13,7 @@ def gen_server[StateT](
     init: Callable[..., StateT],
     *,
     handle_cast: Callable[[StateT, Any], Any] | None = None,
-    handle_call: Callable[[StateT, Any], Any] | None = None,
+    handle_call: Callable[[StateT, Any], Any],
     handle_info: Callable[[StateT, Any], Any] | None = None,
 ) -> Callable[..., Generator[EReceive | ESend, Envelope | None, None]]:
     """Build a stateful process loop from handler functions.
@@ -27,7 +27,8 @@ def gen_server[StateT](
 
         while True:
             envelope = yield EReceive()
-            assert envelope is not None
+            if envelope is None:
+                raise RuntimeError("EReceive yielded None — broker sent no envelope")
 
             match envelope.body:
                 case CastMsg(body=body):
@@ -40,8 +41,6 @@ def gen_server[StateT](
                         )
 
                 case CallMsg(ref=ref, body=body):
-                    if handle_call is None:
-                        raise NotImplementedError("no handle_call registered")
                     result = handle_call(state, body)
                     state, reply = (
                         (yield from result) if inspect.isgenerator(result) else result

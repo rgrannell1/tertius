@@ -1,7 +1,7 @@
 import zmq
 
 from tertius.constants import OK
-from tertius.exceptions import LinkedCrash, ProcessCrash
+from tertius.exceptions import LinkedCrash, NormalExit, ProcessCrash
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
@@ -33,6 +33,10 @@ def _notify_links(
     pid: Pid,
     reason: Exception,
 ) -> None:
+    if isinstance(reason, NormalExit):
+        state.links.pop(pid, None)
+        return
+
     # Links are bidirectional: when one end dies the other gets a LinkedCrash
     # signal and the back-reference is cleaned up so the surviving process isn't
     # notified again if it subsequently dies itself.
