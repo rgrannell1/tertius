@@ -13,11 +13,11 @@ class BrokerState:
     # registered name -> pid
     names: dict[str, Pid] = field(default_factory=dict)
 
-    # watched pid -> [watchers]
-    monitors: dict[Pid, list[Pid]] = field(default_factory=dict)
+    # watched pid -> {watchers}
+    monitors: dict[Pid, set[Pid]] = field(default_factory=dict)
 
     # pid -> bidirectional crash partners
-    links: dict[Pid, list[Pid]] = field(default_factory=dict)
+    links: dict[Pid, set[Pid]] = field(default_factory=dict)
 
     # tombstone: pid -> crash reason
     dead: dict[Pid, Exception] = field(default_factory=dict)

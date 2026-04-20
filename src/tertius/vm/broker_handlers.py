@@ -60,8 +60,8 @@ def handle_link(
         )
         return
 
-    state.links.setdefault(requester_pid, []).append(target_pid)
-    state.links.setdefault(target_pid, []).append(requester_pid)
+    state.links.setdefault(requester_pid, set()).add(target_pid)
+    state.links.setdefault(target_pid, set()).add(requester_pid)
 
 
 def handle_monitor(
@@ -85,7 +85,7 @@ def handle_monitor(
         )
         return
 
-    state.monitors.setdefault(target_pid, []).append(requester_pid)
+    state.monitors.setdefault(target_pid, set()).add(requester_pid)
 
 
 def handle_emit(

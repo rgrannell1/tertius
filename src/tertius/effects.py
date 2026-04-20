@@ -12,7 +12,7 @@ class ESpawn(Effect[Pid]):
 
     tag: ClassVar[LiteralString] = "spawn"
     fn_name: str
-    args: tuple[Any, ...] = field(default_factory=tuple)
+    args: tuple[Any, ...] = field(default=())
 
 
 @dataclass

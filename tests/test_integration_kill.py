@@ -4,7 +4,7 @@ from collections.abc import Generator
 from typing import Any
 
 from tertius.effects import EEmit, EKill, ELink, EMonitor, EReceive, ESpawn
-from tertius.exceptions import ProcessCrash
+from tertius.exceptions import DeadProcess, ProcessCrash
 from tertius.types import Envelope, Pid
 from tertius.vm import run
 
@@ -48,20 +48,20 @@ def test_kill_delivers_process_crash_to_monitor():
     assert str(result.reason) == "killed"
 
 
-def _root_kill_already_dead_is_noop() -> Generator[Any, Any, None]:
+def _root_kill_already_dead_raises() -> Generator[Any, Any, None]:
     worker: Pid = yield ESpawn(fn_name="wait_forever")
     yield EMonitor(pid=worker)
     yield EKill(pid=worker)
-    envelope: Envelope = yield EReceive()
+    yield EReceive()
     yield EKill(pid=worker)
-    yield EEmit(envelope.body)
 
 
-def test_kill_already_dead_process_is_noop():
-    """Proves that killing a dead process a second time does not hang or error."""
+def test_kill_already_dead_process_raises():
+    """Proves that killing an already-dead process raises DeadProcess."""
 
-    result = next(run(_root_kill_already_dead_is_noop, scope=_SCOPE))
-    assert isinstance(result, ProcessCrash)
+    import pytest
+    with pytest.raises(DeadProcess):
+        next(run(_root_kill_already_dead_raises, scope=_SCOPE))
 
 
 def _root_kill_propagates_to_linked_peer() -> Generator[Any, Any, None]:

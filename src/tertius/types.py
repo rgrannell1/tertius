@@ -1,4 +1,4 @@
-"""Types for the Uqbar runtime"""
+"""Types for the Tertius runtime"""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -25,6 +25,8 @@ class Pid:
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "Pid":
+        if not data:
+            raise ValueError("cannot construct Pid from empty bytes")
         return cls(int.from_bytes(data, "big"))
 
 

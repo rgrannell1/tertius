@@ -128,9 +128,10 @@ def _handle_emit(ctrl: "zmq.Socket[bytes]", effect: EEmit) -> None:
 
 
 def _handle_kill(ctrl: "zmq.Socket[bytes]", effect: EKill) -> None:
-    """Kill the target process by sending a kill signal to the broker"""
-
-    ctrl_send(ctrl, *kill.encode(effect.pid))
+    ctrl.send_multipart(kill.encode(effect.pid))
+    response = ctrl.recv_multipart()
+    if response[0] == ERROR:
+        raise pickle.loads(response[1])
 
 
 def make_handlers(

@@ -2,7 +2,7 @@ from tertius.types import Pid
 
 
 class TertiusError(Exception):
-    """An error that occurred in the Uqbar runtime"""
+    """An error that occurred in the Tertius runtime"""
 
     pass
 

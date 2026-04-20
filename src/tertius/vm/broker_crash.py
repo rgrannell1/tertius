@@ -1,7 +1,9 @@
+import pickle
+
 import zmq
 
-from tertius.constants import OK
-from tertius.exceptions import LinkedCrash, NormalExit, ProcessCrash
+from tertius.constants import ERROR, OK
+from tertius.exceptions import DeadProcess, LinkedCrash, NormalExit, ProcessCrash
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
@@ -42,11 +44,9 @@ def _notify_links(
     # notified again if it subsequently dies itself.
     kill_msg = LinkedCrash(pid=pid, reason=reason)
 
-    for peer in state.links.pop(pid, []):
+    for peer in state.links.pop(pid, set()):
         if peer in state.links:
-            state.links[peer] = [
-                linked for linked in state.links[peer] if linked != pid
-            ]
+            state.links[peer].discard(pid)
         notifier.send_multipart(encode_linked_crash_notification(peer, pid, kill_msg))
 
 
@@ -79,12 +79,14 @@ def handle_kill(
     frames: list[bytes],
 ) -> None:
     target_pid = kill.decode(frames)
+
+    if target_pid in state.dead:
+        reply(router, requester, ERROR, pickle.dumps(DeadProcess(target_pid)))
+        return
+
     # Ack before terminating so the caller isn't blocked waiting on a process
     # that may take a moment to actually die.
     reply(router, requester, OK)
-
-    if target_pid in state.dead:
-        return
 
     proc = state.procs.pop(target_pid, None)
     if proc is not None:
