@@ -15,6 +15,25 @@ vm/
   process.py    process-level handlers.
 ```
 
+## Topology
+
+Tertius sets up intercommunicating processes that interact via the actor pattern; they send and receive messages.
+
+Each process gets two `DEALER` sockets (with their PID as their ID).
+
+- `broker address socket`: a relay for sending and receiving messages from other processes
+- `control address socket`: a stateful loop for VM-level events; spawning, registering, identity registry / lookup, linking processes, killing processes, and marking as ready / crashed. This connection maintains application state
+
+A `notifier` socket is to announce processes were killed / crashed on behalf of the dead processes.
+
+`GenServer` is a user-interface wrapping the lower level transport details. It's a class that has three handlers to be implemented:
+
+- `handle_cast`: handle fire and forget messages, return our new state
+- `handle_call`: handle request/reply messages, return our new state and a reply
+- `handle_info`: for any other category of message
+
+It abstracts away the zeromq details and allows processes to focus on what sending and receiving application messages.
+
 ## Effects
 
 | Effect | Description |
