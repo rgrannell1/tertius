@@ -7,6 +7,7 @@ import zmq
 from tertius.constants import OK, READY
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
+from tertius.vm.broker_utils import reply
 from tertius.vm.messages import pid_reply, spawn
 from tertius.vm.process import process_entry
 
@@ -64,7 +65,7 @@ def _await_ready(
                 continue
             child_requester, child_command = child_frames[0], child_frames[1]
             if child_command == READY and child_requester == bytes(new_pid):
-                router.send_multipart([child_requester, OK])
+                reply(router, child_requester, OK)
                 break
             if child_command in handlers:
                 handlers[child_command](router, child_requester, child_frames)
@@ -93,4 +94,4 @@ def handle_spawn(
     # Block until the process is ready before replying to the caller, so the
     # caller can safely send to the new pid immediately after receiving its pid back.
     _await_ready(router, proc, new_pid, fn_name, handlers)
-    router.send_multipart([requester] + pid_reply.encode(new_pid))
+    reply(router, requester, *pid_reply.encode(new_pid))

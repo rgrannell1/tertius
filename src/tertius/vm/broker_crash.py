@@ -4,6 +4,7 @@ from tertius.constants import OK
 from tertius.exceptions import LinkedCrash, ProcessCrash
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
+from tertius.vm.broker_utils import reply
 from tertius.vm.messages import (
     crash,
     encode_crash_notification,
@@ -76,7 +77,7 @@ def handle_kill(
     target_pid = kill.decode(frames)
     # Ack before terminating so the caller isn't blocked waiting on a process
     # that may take a moment to actually die.
-    router.send_multipart([requester, OK])
+    reply(router, requester, OK)
 
     if target_pid in state.dead:
         return
@@ -103,4 +104,4 @@ def handle_crash(
     reason = crash.decode(frames)
 
     _record_crash(state, notifier, crashed_pid, reason)
-    router.send_multipart([requester, OK])
+    reply(router, requester, OK)

@@ -9,3 +9,4 @@ dist/
 build/
 .mypy_cache/
 /tmp/tertius-*.sock
+.claude/commands/

@@ -20,6 +20,7 @@ from tertius.constants import (
 )
 from tertius.types import Pid
 from tertius.vm.broker_crash import handle_crash, handle_kill
+from tertius.vm.broker_utils import reply
 from tertius.vm.broker_handlers import (
     handle_emit,
     handle_link,
@@ -153,4 +154,4 @@ class Broker:
                 except Exception as err:
                     # Send the exception back to the caller rather than crashing
                     # the broker — one bad request shouldn't take down the VM.
-                    router.send_multipart([requester, ERROR, pickle.dumps(err)])
+                    reply(router, requester, ERROR, pickle.dumps(err))

@@ -4,6 +4,7 @@ from tertius.constants import OK
 from tertius.exceptions import LinkedCrash, ProcessCrash
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
+from tertius.vm.broker_utils import reply
 from tertius.vm.messages import (
     emit,
     encode_crash_notification,
@@ -25,7 +26,7 @@ def handle_register(
     # Names are process-scoped: the pid is derived from the requester identity
     # rather than the message body, so a process can only register itself.
     state.names[register.decode(frames)] = Pid.from_bytes(requester)
-    router.send_multipart([requester, OK])
+    reply(router, requester, OK)
 
 
 def handle_whereis(
@@ -35,7 +36,7 @@ def handle_whereis(
     frames: list[bytes],
 ) -> None:
     pid = state.names.get(whereis.decode(frames))
-    router.send_multipart([requester] + whereis_reply.encode(pid))
+    reply(router, requester, *whereis_reply.encode(pid))
 
 
 def handle_link(
@@ -48,7 +49,7 @@ def handle_link(
     requester_pid = Pid.from_bytes(requester)
     target_pid = link.decode(frames)
     # Ack immediately so the requester isn't blocked while we check the tombstone.
-    router.send_multipart([requester, OK])
+    reply(router, requester, OK)
 
     if target_pid in state.dead:
         # Target already gone — deliver the crash signal retroactively so the
@@ -72,7 +73,7 @@ def handle_monitor(
 ) -> None:
     target_pid = monitor.decode(frames)
     requester_pid = Pid.from_bytes(requester)
-    router.send_multipart([requester, OK])
+    reply(router, requester, OK)
 
     if target_pid in state.dead:
         # Same retroactive delivery as handle_link — the monitor guarantee is
@@ -96,4 +97,4 @@ def handle_emit(
     # Emitted values are surfaced to the host application via the queue rather
     # than being routed to another process, so they cross the VM boundary.
     state.emit_queue.put(emit.decode(frames))
-    router.send_multipart([requester, OK])
+    reply(router, requester, OK)

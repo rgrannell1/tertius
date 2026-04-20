@@ -16,3 +16,5 @@
 - Do not write inner functions; use partial application instead
 - Avoid using optional, or `X | None = None` unless there's a direct need for it
 - Add short descriptions to each file of the intent of the contents
+- Factor out shared test setup code to a conftest.py
+- Factor out types to <module_name>_types.py
