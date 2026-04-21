@@ -1,17 +1,40 @@
+# VM entry point — wires the broker, process threads, and effect handlers together.
 import os
+import queue
 import threading
 from collections.abc import Callable, Generator
+from functools import partial
 from typing import Any
 
 import zmq
 from orbis import complete
 
+from tertius.types import Pid, Scope
 from tertius.vm.broker import Broker
 from tertius.vm.process import make_handlers
 
-Scope = dict[str, Callable[..., Any]]
-
 _DONE = object()
+
+
+def _root_thread(
+    fn: Callable[..., Any],
+    args: tuple[Any, ...],
+    root_pid: Pid,
+    dealer: "zmq.Socket[bytes]",
+    ctrl: "zmq.Socket[bytes]",
+    ctx: "zmq.Context[zmq.Socket[bytes]]",
+    root_exc: list[BaseException],
+    emit_queue: "queue.Queue[Any]",
+) -> None:
+    try:
+        complete(fn(*args), **make_handlers(root_pid, dealer, ctrl))
+    except Exception as err:
+        root_exc.append(err)
+    finally:
+        dealer.close()
+        ctrl.close()
+        ctx.term()
+        emit_queue.put(_DONE)
 
 
 class VM:
@@ -42,18 +65,13 @@ class VM:
 
         root_exc: list[BaseException] = []
 
-        def root_thread() -> None:
-            try:
-                complete(fn(*args), **make_handlers(root_pid, dealer, ctrl))
-            except Exception as err:
-                root_exc.append(err)
-            finally:
-                dealer.close()
-                ctrl.close()
-                ctx.term()
-                self._broker.emit_queue.put(_DONE)
-
-        threading.Thread(target=root_thread, daemon=True).start()
+        threading.Thread(
+            target=partial(
+                _root_thread, fn, args, root_pid, dealer, ctrl, ctx, root_exc,
+                self._broker.emit_queue,
+            ),
+            daemon=True,
+        ).start()
 
         while True:
             event = self._broker.emit_queue.get()

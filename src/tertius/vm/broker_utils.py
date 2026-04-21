@@ -1,3 +1,4 @@
+# Low-level ZMQ socket utilities shared across broker modules.
 import zmq
 
 

@@ -1,3 +1,4 @@
+# Broker control handlers — register, whereis, link, monitor, emit.
 import zmq
 
 from tertius.constants import OK

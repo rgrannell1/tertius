@@ -14,10 +14,15 @@ from tertius.vm import run
 # ---------------------------------------------------------------------------
 
 
-echo = gen_server(
-    init=lambda *_: None,
-    handle_call=lambda state, body: (state, body),
-)
+def _echo_init(*_: Any) -> None:
+    return None
+
+
+def _echo_call(state: None, body: Any) -> tuple[None, Any]:
+    return state, body
+
+
+echo = gen_server(init=_echo_init, handle_call=_echo_call)
 
 
 def run_echo() -> Generator[Any, Any, None]:

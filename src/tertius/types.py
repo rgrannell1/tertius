@@ -4,6 +4,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+# Mapping of function name to callable — defines what processes a VM can spawn.
+Scope = dict[str, Callable[..., Any]]
+
 
 @dataclass(frozen=True)
 class Codec[T]:

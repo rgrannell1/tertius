@@ -21,9 +21,17 @@ def _accumulator_call(state: list, body: Any) -> tuple[list, list]:
     raise NotImplementedError(body)
 
 
+def _accumulator_init(*_: Any) -> list:
+    return []
+
+
+def _accumulator_info(state: list, body: Any) -> list:
+    return state + [body]
+
+
 accumulator = gen_server(
-    init=lambda *_: [],
-    handle_info=lambda state, body: state + [body],
+    init=_accumulator_init,
+    handle_info=_accumulator_info,
     handle_call=_accumulator_call,
 )
 

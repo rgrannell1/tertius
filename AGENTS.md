@@ -19,3 +19,4 @@
 - Factor out shared test setup code to a conftest.py
 - Factor out types to <module_name>_types.py
 - Avoid using python lambdas, except in .sort(). never use multiple lambdas in one call
+- Factor out complex type definitions into named type definitions.

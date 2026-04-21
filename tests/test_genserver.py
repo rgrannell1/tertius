@@ -1,4 +1,7 @@
+"""Tests for gen_server — stateful process loops built from handler functions."""
+
 from collections.abc import Callable, Generator
+from functools import partial
 from typing import Any
 
 import pytest
@@ -45,6 +48,14 @@ counter = gen_server(init=_init, handle_cast=_cast, handle_call=_call)
 SENDER = Pid(99)
 
 
+def _pop_inbox(inbox: list, _effect: EReceive) -> Envelope:
+    return inbox.pop(0)
+
+
+def _record_send(sent: list, effect: ESend) -> None:
+    sent.append(effect.body)
+
+
 def drive(
     server: Callable[..., Generator], initial: Any, messages: list[Any]
 ) -> list[Any]:
@@ -59,8 +70,8 @@ def drive(
     try:
         complete(
             server(initial),
-            receive=lambda effect: inbox.pop(0),
-            send=lambda effect: sent.append(effect.body),
+            receive=partial(_pop_inbox, inbox),
+            send=partial(_record_send, sent),
         )
     except IndexError:
         pass  # inbox exhausted — expected termination
@@ -164,30 +175,40 @@ def test_state_unchanged_after_call():
 # ---------------------------------------------------------------------------
 
 
+def _exploding_cast(state: int, body: Any) -> int:
+    raise ValueError("cast exploded")
+
+
+def _init_zero(*_: Any) -> int:
+    return 0
+
+
+def _return_state(state: int, _body: Any) -> tuple[int, int]:
+    return state, state
+
+
 def test_handle_cast_exception_propagates():
     """Proves that an exception raised in handle_cast propagates out of the loop."""
 
-    def _exploding_cast(state: int, body: Any) -> int:
-        raise ValueError("cast exploded")
-
     server = gen_server(
-        init=lambda *_: 0,
+        init=_init_zero,
         handle_cast=_exploding_cast,
-        handle_call=lambda state, body: (state, state),
+        handle_call=_return_state,
     )
 
     with pytest.raises(ValueError, match="cast exploded"):
         drive(server, 0, [CastMsg(body="anything")])
 
 
+def _exploding_call(state: int, body: Any) -> tuple[int, Any]:
+    raise RuntimeError("call exploded")
+
+
 def test_handle_call_exception_propagates():
     """Proves that an exception raised in handle_call propagates out of the loop."""
 
-    def _exploding_call(state: int, body: Any) -> tuple[int, Any]:
-        raise RuntimeError("call exploded")
-
     server = gen_server(
-        init=lambda *_: 0,
+        init=_init_zero,
         handle_call=_exploding_call,
     )
 
@@ -200,13 +221,17 @@ def test_handle_call_exception_propagates():
 # ---------------------------------------------------------------------------
 
 
+def _record_body(sent: list, effect: ESend) -> None:
+    sent.append(effect.body)
+
+
 def test_cast_helper_sends_castmsg():
     """Proves that cast() yields an ESend wrapping a CastMsg."""
 
     sent = []
     complete(
         mcast(SENDER, ("inc", 1)),
-        send=lambda effect: sent.append(effect.body),
+        send=partial(_record_body, sent),
     )
     assert sent == [CastMsg(body=("inc", 1))]
 

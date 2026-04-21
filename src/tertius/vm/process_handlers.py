@@ -1,3 +1,4 @@
+# Effect handlers for spawned processes — bridges algebraic effects to ZMQ socket calls.
 import pickle
 import time
 from functools import partial

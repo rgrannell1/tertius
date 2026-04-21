@@ -1,3 +1,4 @@
+# pytest configuration — custom pass/fail reporter that prints test docstrings.
 import pytest
 
 

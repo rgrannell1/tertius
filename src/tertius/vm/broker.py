@@ -1,3 +1,4 @@
+# Central VM broker — routes inter-process messages and handles all control commands.
 import pickle
 import queue
 import threading
@@ -18,7 +19,7 @@ from tertius.constants import (
     SPAWN,
     WHEREIS,
 )
-from tertius.types import Pid
+from tertius.types import Pid, Scope
 from tertius.vm.broker_crash import handle_crash, handle_kill
 from tertius.vm.broker_utils import reply
 from tertius.vm.broker_handlers import (
@@ -30,9 +31,6 @@ from tertius.vm.broker_handlers import (
 )
 from tertius.vm.broker_spawn import handle_spawn
 from tertius.vm.broker_state import BrokerState
-
-Scope = dict[str, Callable[..., Any]]
-
 
 def make_ctrl_handlers(
     alloc_pid: Callable[[], Pid],

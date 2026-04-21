@@ -1,3 +1,4 @@
+# Public API for the Tertius erlang-style process runtime.
 from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
 from tertius.effects import (
     EEmit,

@@ -1,3 +1,4 @@
+# Crash and kill handlers — propagate process failures to monitors and linked processes.
 import pickle
 
 import zmq

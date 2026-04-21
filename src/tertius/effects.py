@@ -1,3 +1,4 @@
+# Effect definitions for the Tertius runtime — process lifecycle, messaging, and observability.
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, LiteralString
 

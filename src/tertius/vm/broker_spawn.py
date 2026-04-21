@@ -1,3 +1,4 @@
+# Broker spawn handler — starts new OS processes and waits for them to signal readiness.
 import multiprocessing
 from collections.abc import Callable
 from typing import Any
@@ -5,14 +6,11 @@ from typing import Any
 import zmq
 
 from tertius.constants import OK, READY, SPAWN_READY_TIMEOUT_MS
-from tertius.types import Pid
+from tertius.types import Pid, Scope
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
 from tertius.vm.messages import pid_reply, spawn
 from tertius.vm.process import process_entry
-
-Scope = dict[str, Callable[..., Any]]
-
 
 def _start_process(
     pid: Pid,

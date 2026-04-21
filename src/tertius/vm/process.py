@@ -1,3 +1,4 @@
+# Process entry point and lifecycle — runs a generator inside a spawned OS process.
 import sys
 import traceback
 from collections.abc import Callable

@@ -1,3 +1,4 @@
+"""Tests for ZMQ wire format encoding and decoding — all message types roundtrip correctly."""
 from hypothesis import given
 from hypothesis import strategies as st
 
