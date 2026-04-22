@@ -81,6 +81,7 @@ def _connect_dealer(
 
 
 def process_entry(
+    node_id: int,
     pid_int: int,
     broker_addr: str,
     ctrl_addr: str,
@@ -91,7 +92,7 @@ def process_entry(
     """Entry point for each spawned OS process. Must be module-level to be picklable."""
 
     ctx = zmq.Context()
-    pid = Pid(pid_int)
+    pid = Pid(node_id=node_id, id=pid_int)
     dealer = _connect_dealer(ctx, pid, broker_addr)
     ctrl = _connect_dealer(ctx, pid, ctrl_addr)
 

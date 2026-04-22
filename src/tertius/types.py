@@ -18,19 +18,21 @@ class Codec[T]:
 class Pid:
     """Our process identifiers"""
 
+    node_id: int
     id: int
 
     def __bytes__(self) -> bytes:
-        return self.id.to_bytes(8, "big")
+        # 4-byte node identifier followed by 8-byte local process id
+        return self.node_id.to_bytes(4, "big") + self.id.to_bytes(8, "big")
 
     def __repr__(self) -> str:
-        return f"<Pid {self.id}>"
+        return f"<Pid {self.node_id}:{self.id}>"
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "Pid":
         if not data:
             raise ValueError("cannot construct Pid from empty bytes")
-        return cls(int.from_bytes(data, "big"))
+        return cls(node_id=int.from_bytes(data[:4], "big"), id=int.from_bytes(data[4:], "big"))
 
 
 @dataclass(frozen=True)

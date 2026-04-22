@@ -24,7 +24,7 @@ def _start_process(
     # Daemon=True so child processes don't outlive the broker if it exits uncleanly.
     proc = multiprocessing.Process(
         target=process_entry,
-        args=(pid.id, broker_addr, ctrl_addr, fn_name, args, scope),
+        args=(pid.node_id, pid.id, broker_addr, ctrl_addr, fn_name, args, scope),
         daemon=True,
     )
     proc.start()

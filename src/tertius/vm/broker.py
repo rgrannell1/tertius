@@ -75,11 +75,13 @@ class Broker:
         ctrl_addr: str,
         ctx: "zmq.Context[zmq.Socket[bytes]]",
         scope: Scope,
+        node_id: int,
     ) -> None:
         self._broker_addr = broker_addr
         self._ctrl_addr = ctrl_addr
         self._ctx = ctx
         self._scope = scope
+        self._node_id = node_id
         self._next_pid = 0
         self._pid_lock = threading.Lock()
         self._state = BrokerState()
@@ -94,7 +96,7 @@ class Broker:
         # dead dict remains a reliable tombstone after a process exits.
 
         with self._pid_lock:
-            pid = Pid(self._next_pid)
+            pid = Pid(node_id=self._node_id, id=self._next_pid)
             self._next_pid += 1
             return pid
 

@@ -1,6 +1,8 @@
 # VM entry point — wires the broker, process threads, and effect handlers together.
+import hashlib
 import os
 import queue
+import socket
 import threading
 from collections.abc import Callable, Generator
 from functools import partial
@@ -12,6 +14,12 @@ from orbis import complete
 from tertius.types import Pid, Scope
 from tertius.vm.broker import Broker
 from tertius.vm.process import make_handlers
+
+
+def make_node_id(host: str, port: int) -> int:
+    """Derive a 4-byte node identifier from a host and port."""
+    digest = hashlib.sha256(f"{host}:{port}".encode()).digest()
+    return int.from_bytes(digest[:4], "big")
 
 _DONE = object()
 
@@ -43,7 +51,9 @@ class VM:
         self._broker_addr = f"ipc:///tmp/tertius-{vm_pid}-data.sock"
         self._ctrl_addr = f"ipc:///tmp/tertius-{vm_pid}-ctrl.sock"
         self._ctx: zmq.Context[zmq.Socket[bytes]] = zmq.Context()
-        self._broker = Broker(self._broker_addr, self._ctrl_addr, self._ctx, scope)
+        # vm_pid stands in for a port until the broker binds a TCP address
+        node_id = make_node_id(socket.gethostname(), vm_pid)
+        self._broker = Broker(self._broker_addr, self._ctrl_addr, self._ctx, scope, node_id)
 
     def start(
         self, fn: Callable[..., Any], args: tuple[Any, ...]

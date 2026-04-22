@@ -118,7 +118,7 @@ def _root_call_timeout_succeeds() -> Generator[Any, Any, None]:
 
 def _root_call_timeout_fires() -> Generator[Any, Any, None]:
     """Call a process that doesn't exist — timeout must fire."""
-    ghost = Pid(99999)
+    ghost = Pid(node_id=0, id=99999)
     yield EEmit((yield from mcall_timeout(ghost, "get", timeout_ms=50)))
 
 

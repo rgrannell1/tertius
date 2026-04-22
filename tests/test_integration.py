@@ -11,19 +11,19 @@ from tests.fixtures import run_marco_polo_and_report
 _SCOPE = {"run_marco_polo_and_report": run_marco_polo_and_report}
 
 
-def root(n: int) -> Generator[Any, Any, None]:
+def root(num_workers: int) -> Generator[Any, Any, None]:
     """Spawn n worker processes, collect their results, emit them."""
 
     me: Pid = yield ESelf()
 
-    for _ in range(n):
+    for _ in range(num_workers):
         yield ESpawn(
             fn_name="run_marco_polo_and_report",
             args=(bytes(me),),
         )
 
     results = []
-    for _ in range(n):
+    for _ in range(num_workers):
         envelope: Envelope = yield EReceive()
 
         match envelope.body:

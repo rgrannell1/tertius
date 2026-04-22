@@ -45,7 +45,7 @@ counter = gen_server(init=_init, handle_cast=_cast, handle_call=_call)
 # Helpers
 # ---------------------------------------------------------------------------
 
-SENDER = Pid(99)
+SENDER = Pid(node_id=0, id=99)
 
 
 def _pop_inbox(inbox: list, _effect: EReceive) -> Envelope:
@@ -97,18 +97,18 @@ def test_init_sets_initial_state():
 
 
 @given(st.integers(min_value=0, max_value=1000))
-def test_single_increment(n):
+def test_single_increment(increment):
     """Proves that increment message cast updates state by the correct amount."""
 
     sent = drive(
         counter,
         0,
         [
-            CastMsg(body=("inc", n)),
+            CastMsg(body=("inc", increment)),
             CallMsg(ref=0, body="get"),
         ],
     )
-    assert sent == [ReplyMsg(ref=0, body=n)]
+    assert sent == [ReplyMsg(ref=0, body=increment)]
 
 
 @given(st.lists(st.integers(min_value=0, max_value=100), min_size=1, max_size=20))
