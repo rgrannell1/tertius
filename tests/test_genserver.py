@@ -1,13 +1,14 @@
 """Tests for gen_server — stateful process loops built from handler functions."""
 
 from collections.abc import Callable, Generator
+from dataclasses import dataclass
 from functools import partial
-from typing import Any
+from typing import Any, ClassVar, LiteralString
 
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-from orbis import complete
+from orbis import Effect, UnhandledEffect, complete
 
 from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
 from tertius.effects import EReceive, EReceiveTimeout, ESend
@@ -15,27 +16,47 @@ from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
 
 
 # ---------------------------------------------------------------------------
+# A minimal custom effect used in effectful-handler tests
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class EDouble(Effect[int]):
+    """Test effect — handler returns double the given value."""
+
+    tag: ClassVar[LiteralString] = "double"
+    value: int
+
+
+def _handle_double(effect: EDouble) -> int:
+    return effect.value * 2
+
+
+# ---------------------------------------------------------------------------
 # A minimal counter process used across all tests
 # ---------------------------------------------------------------------------
 
 
-def _init(initial: int = 0) -> int:
+def _init(initial: int = 0) -> Generator[Any, Any, int]:
     return initial
+    yield
 
 
-def _cast(state: int, body: Any) -> int:
+def _cast(state: int, body: Any) -> Generator[Any, Any, int]:
     match body:
         case ("inc", n):
             return state + n
         case _:
             return state
+    yield
 
 
-def _call(state: int, body: Any) -> tuple[int, Any]:
+def _call(state: int, body: Any) -> Generator[Any, Any, tuple[int, Any]]:
     match body:
         case "get":
             return state, state
     raise NotImplementedError(body)
+    yield
 
 
 counter = gen_server(init=_init, handle_cast=_cast, handle_call=_call)
@@ -57,11 +78,15 @@ def _record_send(sent: list, effect: ESend) -> None:
 
 
 def drive(
-    server: Callable[..., Generator], initial: Any, messages: list[Any]
+    server: Callable[..., Generator],
+    initial: Any,
+    messages: list[Any],
+    **extra_handlers: Any,
 ) -> list[Any]:
     """Drive a gen_server loop with a fixed sequence of messages.
 
     Returns whatever the server sent back. Stops cleanly when messages run out.
+    Extra keyword arguments are forwarded to complete() as additional effect handlers.
     """
 
     inbox = [Envelope(sender=SENDER, body=msg) for msg in messages]
@@ -72,6 +97,7 @@ def drive(
             server(initial),
             receive=partial(_pop_inbox, inbox),
             send=partial(_record_send, sent),
+            **extra_handlers,
         )
     except IndexError:
         pass  # inbox exhausted — expected termination
@@ -175,16 +201,19 @@ def test_state_unchanged_after_call():
 # ---------------------------------------------------------------------------
 
 
-def _exploding_cast(state: int, body: Any) -> int:
+def _exploding_cast(state: int, body: Any) -> Generator[Any, Any, int]:
     raise ValueError("cast exploded")
+    yield
 
 
-def _init_zero(*_: Any) -> int:
+def _init_zero(*_: Any) -> Generator[Any, Any, int]:
     return 0
+    yield
 
 
-def _return_state(state: int, _body: Any) -> tuple[int, int]:
+def _return_state(state: int, _body: Any) -> Generator[Any, Any, tuple[int, int]]:
     return state, state
+    yield
 
 
 def test_handle_cast_exception_propagates():
@@ -200,8 +229,9 @@ def test_handle_cast_exception_propagates():
         drive(server, 0, [CastMsg(body="anything")])
 
 
-def _exploding_call(state: int, body: Any) -> tuple[int, Any]:
+def _exploding_call(state: int, body: Any) -> Generator[Any, Any, tuple[int, Any]]:
     raise RuntimeError("call exploded")
+    yield
 
 
 def test_handle_call_exception_propagates():
@@ -339,3 +369,140 @@ def test_call_timeout_returns_none_on_timeout():
         receive_timeout=stub_receive_timeout,
     )
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Effectful handlers — cast, call, and init may yield effects
+# ---------------------------------------------------------------------------
+
+
+def _doubling_cast(state: int, body: Any) -> Generator[Any, Any, int]:
+    # generator cast: yields EDouble to compute the increment, then adds it to state
+    match body:
+        case ("double_add", n):
+            doubled = yield EDouble(value=n)
+            return state + doubled
+        case _:
+            return state
+
+
+def _doubling_call(state: int, body: Any) -> Generator[Any, Any, tuple[int, Any]]:
+    # generator call: yields EDouble to compute the reply value
+    match body:
+        case "doubled_get":
+            doubled = yield EDouble(value=state)
+            return state, doubled
+        case "get":
+            return state, state
+    raise NotImplementedError(body)
+
+
+def _doubling_init(initial: int) -> Generator[Any, Any, int]:
+    # generator init: yields EDouble to compute initial state
+    doubled = yield EDouble(value=initial)
+    return doubled
+
+
+_effectful_cast_server = gen_server(
+    init=_init, handle_cast=_doubling_cast, handle_call=_call
+)
+_effectful_call_server = gen_server(
+    init=_init, handle_cast=_cast, handle_call=_doubling_call
+)
+_effectful_init_server = gen_server(
+    init=_doubling_init, handle_cast=_cast, handle_call=_call
+)
+
+
+def test_effectful_cast_updates_state_via_yielded_effect():
+    """Proves that a generator handle_cast can yield an effect and use its return value to update state."""
+
+    sent = drive(
+        _effectful_cast_server,
+        0,
+        [CastMsg(body=("double_add", 5)), CallMsg(ref=0, body="get")],
+        double=_handle_double,
+    )
+    assert sent == [ReplyMsg(ref=0, body=10)]  # 0 + double(5) = 10
+
+
+def test_effectful_cast_state_accumulates_across_messages():
+    """Proves that state from successive effectful casts accumulates correctly."""
+
+    sent = drive(
+        _effectful_cast_server,
+        0,
+        [
+            CastMsg(body=("double_add", 3)),
+            CastMsg(body=("double_add", 4)),
+            CallMsg(ref=0, body="get"),
+        ],
+        double=_handle_double,
+    )
+    assert sent == [ReplyMsg(ref=0, body=14)]  # double(3) + double(4) = 6 + 8 = 14
+
+
+def test_effectful_call_reply_uses_yielded_effect():
+    """Proves that a generator handle_call can yield an effect and include its return value in the reply."""
+
+    sent = drive(
+        _effectful_call_server,
+        7,
+        [CallMsg(ref=0, body="doubled_get")],
+        double=_handle_double,
+    )
+    assert sent == [ReplyMsg(ref=0, body=14)]  # double(7) = 14
+
+
+def test_effectful_call_does_not_mutate_state():
+    """Proves that an effectful handle_call leaves state unchanged after the reply."""
+
+    sent = drive(
+        _effectful_call_server,
+        7,
+        [CallMsg(ref=0, body="doubled_get"), CallMsg(ref=1, body="get")],
+        double=_handle_double,
+    )
+    assert sent == [ReplyMsg(ref=0, body=14), ReplyMsg(ref=1, body=7)]
+
+
+def test_effectful_init_computes_initial_state_via_effect():
+    """Proves that a generator init can yield an effect to derive the initial state."""
+
+    sent = drive(
+        _effectful_init_server,
+        5,
+        [CallMsg(ref=0, body="get")],
+        double=_handle_double,
+    )
+    assert sent == [ReplyMsg(ref=0, body=10)]  # initial = double(5) = 10
+
+
+def test_unhandled_effect_from_cast_propagates_out():
+    """Proves that an effect yielded by a handler and not handled by the runner propagates as UnhandledEffect."""
+
+    with pytest.raises(UnhandledEffect):
+        # no 'double' handler passed — EDouble must bubble out of the gen_server loop
+        drive(
+            _effectful_cast_server,
+            0,
+            [CastMsg(body=("double_add", 5))],
+        )
+
+
+def test_unhandled_effect_from_call_propagates_out():
+    """Proves that an unhandled effect from handle_call propagates as UnhandledEffect."""
+
+    with pytest.raises(UnhandledEffect):
+        drive(
+            _effectful_call_server,
+            7,
+            [CallMsg(ref=0, body="doubled_get")],
+        )
+
+
+def test_unhandled_effect_from_init_propagates_out():
+    """Proves that an unhandled effect from init propagates as UnhandledEffect."""
+
+    with pytest.raises(UnhandledEffect):
+        drive(_effectful_init_server, 5, [])

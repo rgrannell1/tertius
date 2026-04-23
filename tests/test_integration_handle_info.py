@@ -14,19 +14,22 @@ from tertius.vm import run
 # ---------------------------------------------------------------------------
 
 
-def _accumulator_call(state: list, body: Any) -> tuple[list, list]:
+def _accumulator_call(state: list, body: Any) -> Generator[Any, Any, tuple[list, Any]]:
     match body:
         case "get":
             return state, state
     raise NotImplementedError(body)
+    yield
 
 
-def _accumulator_init(*_: Any) -> list:
+def _accumulator_init(*_: Any) -> Generator[Any, Any, list]:
     return []
+    yield
 
 
-def _accumulator_info(state: list, body: Any) -> list:
+def _accumulator_info(state: list, body: Any) -> Generator[Any, Any, list]:
     return state + [body]
+    yield
 
 
 accumulator = gen_server(

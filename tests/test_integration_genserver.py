@@ -4,7 +4,7 @@ from collections.abc import Generator
 from typing import Any
 
 from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
-from tertius.effects import EEmit, ESpawn
+from tertius.effects import EEmit, ESpawn, ESleep
 from tertius.types import Pid
 from tertius.vm import run
 
@@ -14,23 +14,26 @@ from tertius.vm import run
 # ---------------------------------------------------------------------------
 
 
-def _init(initial: int = 0) -> int:
+def _init(initial: int = 0) -> Generator[Any, Any, int]:
     return initial
+    yield
 
 
-def _cast(state: int, body: Any) -> int:
+def _cast(state: int, body: Any) -> Generator[Any, Any, int]:
     match body:
         case ("inc", n):
             return state + n
         case _:
             return state
+    yield
 
 
-def _call(state: int, body: Any) -> tuple[int, int]:
+def _call(state: int, body: Any) -> Generator[Any, Any, tuple[int, Any]]:
     match body:
         case "get":
             return state, state
     raise NotImplementedError(body)
+    yield
 
 
 counter = gen_server(init=_init, handle_cast=_cast, handle_call=_call)
@@ -134,3 +137,73 @@ def test_call_timeout_returns_none_when_server_is_unreachable():
 
     result = next(run(_root_call_timeout_fires, scope=_SCOPE))
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Effectful handlers — cast and init that yield real process effects
+# ---------------------------------------------------------------------------
+
+
+def _emitting_cast(state: int, body: Any) -> Generator[Any, Any, int]:
+    # generator cast: emits a telemetry event as a side-effect before updating state
+    match body:
+        case ("inc", n):
+            yield EEmit(("cast_applied", n))
+            return state + n
+        case _:
+            return state
+
+
+def _sleeping_init(initial: int) -> Generator[Any, Any, int]:
+    # generator init: sleeps briefly then returns the initial state
+    yield ESleep(ms=1)
+    return initial
+
+
+_emitting_counter = gen_server(
+    init=_init, handle_cast=_emitting_cast, handle_call=_call
+)
+_sleeping_init_counter = gen_server(
+    init=_sleeping_init, handle_cast=_cast, handle_call=_call
+)
+
+
+def run_emitting_counter(initial: int) -> Generator[Any, Any, None]:
+    yield from _emitting_counter(initial)
+
+
+def run_sleeping_init_counter(initial: int) -> Generator[Any, Any, None]:
+    yield from _sleeping_init_counter(initial)
+
+
+def _root_emitting_cast() -> Generator[Any, Any, None]:
+    server: Pid = yield ESpawn(fn_name="run_emitting_counter", args=(0,))
+    yield from mcast(server, ("inc", 5))
+    result = yield from mcall(server, "get")
+    yield EEmit(("final", result))
+
+
+def _root_sleeping_init() -> Generator[Any, Any, None]:
+    server: Pid = yield ESpawn(fn_name="run_sleeping_init_counter", args=(99,))
+    yield EEmit((yield from mcall(server, "get")))
+
+
+_EFFECTFUL_SCOPE = {
+    "run_emitting_counter": run_emitting_counter,
+    "run_sleeping_init_counter": run_sleeping_init_counter,
+}
+
+
+def test_handler_can_emit_telemetry_as_side_effect():
+    """Proves that a generator handle_cast can yield EEmit and the event arrives at the caller."""
+
+    events = list(run(_root_emitting_cast, scope=_EFFECTFUL_SCOPE))
+    assert ("cast_applied", 5) in events
+    assert ("final", 5) in events
+
+
+def test_generator_init_can_yield_process_effects():
+    """Proves that a generator init function can yield effects handled by the process runtime."""
+
+    result = next(run(_root_sleeping_init, scope=_EFFECTFUL_SCOPE))
+    assert result == 99
