@@ -22,7 +22,7 @@ The frames we pass have the layout (ROUTER-received):
 import pickle
 from typing import Any
 
-from tertius.constants import CRASH, EMIT, KILL, LINK, MONITOR, REGISTER, SPAWN, WHEREIS
+from tertius.constants import Cmd
 from tertius.exceptions import LinkedCrash, ProcessCrash
 from tertius.types import Codec, Envelope, Pid
 
@@ -78,7 +78,7 @@ def encode_linked_crash_notification(
 
 
 def _encode_spawn(fn_name: str, args: tuple[Any, ...]) -> list[bytes]:
-    return [SPAWN, fn_name.encode(), pickle.dumps(args)]
+    return [Cmd.SPAWN, fn_name.encode(), pickle.dumps(args)]
 
 
 def _decode_spawn(frames: list[bytes]) -> tuple[str, tuple[Any, ...]]:
@@ -92,7 +92,7 @@ spawn: Codec[tuple[str, tuple[Any, ...]]] = Codec(
 
 
 def _encode_register(name: str) -> list[bytes]:
-    return [REGISTER, name.encode()]
+    return [Cmd.REGISTER, name.encode()]
 
 
 def _decode_register(frames: list[bytes]) -> str:
@@ -103,7 +103,7 @@ register: Codec[str] = Codec(encode=_encode_register, decode=_decode_register)
 
 
 def _encode_whereis(name: str) -> list[bytes]:
-    return [WHEREIS, name.encode()]
+    return [Cmd.WHEREIS, name.encode()]
 
 
 def _decode_whereis(frames: list[bytes]) -> str:
@@ -114,7 +114,7 @@ whereis: Codec[str] = Codec(encode=_encode_whereis, decode=_decode_whereis)
 
 
 def _encode_link(target: Pid) -> list[bytes]:
-    return [LINK, bytes(target)]
+    return [Cmd.LINK, bytes(target)]
 
 
 def _decode_link(frames: list[bytes]) -> Pid:
@@ -125,7 +125,7 @@ link: Codec[Pid] = Codec(encode=_encode_link, decode=_decode_link)
 
 
 def _encode_monitor(target: Pid) -> list[bytes]:
-    return [MONITOR, bytes(target)]
+    return [Cmd.MONITOR, bytes(target)]
 
 
 def _decode_monitor(frames: list[bytes]) -> Pid:
@@ -136,7 +136,7 @@ monitor: Codec[Pid] = Codec(encode=_encode_monitor, decode=_decode_monitor)
 
 
 def _encode_emit(body: Any) -> list[bytes]:
-    return [EMIT, pickle.dumps(body)]
+    return [Cmd.EMIT, pickle.dumps(body)]
 
 
 def _decode_emit(frames: list[bytes]) -> Any:
@@ -147,7 +147,7 @@ emit: Codec[Any] = Codec(encode=_encode_emit, decode=_decode_emit)
 
 
 def _encode_kill(target: Pid) -> list[bytes]:
-    return [KILL, bytes(target)]
+    return [Cmd.KILL, bytes(target)]
 
 
 def _decode_kill(frames: list[bytes]) -> Pid:
@@ -158,7 +158,7 @@ kill: Codec[Pid] = Codec(encode=_encode_kill, decode=_decode_kill)
 
 
 def _encode_crash(reason: Exception) -> list[bytes]:
-    return [CRASH, pickle.dumps(reason)]
+    return [Cmd.CRASH, pickle.dumps(reason)]
 
 
 def _decode_crash(frames: list[bytes]) -> Exception:

@@ -7,7 +7,7 @@ from typing import Any
 import zmq
 from orbis import complete
 
-from tertius.constants import READY
+from tertius.constants import Cmd
 from tertius.exceptions import NormalExit
 from tertius.types import Pid
 from tertius.vm.broker_utils import ctrl_send
@@ -16,19 +16,19 @@ from tertius.vm.process_handlers import make_handlers
 
 
 def _primed(gen: Any, ctrl: "zmq.Socket[bytes]") -> Any:
-    """Wrap a generator so READY is sent only after it survives its first step.
+    """Wrap a generator so Cmd.READY is sent only after it survives its first step.
 
-    If the generator raises before yielding, no READY is sent — the broker detects
+    If the generator raises before yielding, no Cmd.READY is sent — the broker detects
     the dead process via its recv timeout.
     """
 
     try:
         effect = next(gen)
     except StopIteration:
-        ctrl_send(ctrl, READY)
+        ctrl_send(ctrl, Cmd.READY)
         return
 
-    ctrl_send(ctrl, READY)
+    ctrl_send(ctrl, Cmd.READY)
 
     while True:
         try:

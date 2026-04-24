@@ -1,7 +1,7 @@
 # Broker control handlers — register, whereis, link, monitor, emit.
 import zmq
 
-from tertius.constants import OK
+from tertius.constants import Cmd
 from tertius.exceptions import LinkedCrash, ProcessCrash
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
@@ -37,7 +37,7 @@ def handle_register(
     pid = Pid.from_bytes(requester)
     state.names[registered_name] = pid
     state.emit_queue.put(name_registered(pid, registered_name))
-    reply(router, requester, OK)
+    reply(router, requester, Cmd.OK)
 
 
 def handle_whereis(
@@ -60,7 +60,7 @@ def handle_link(
     requester_pid = Pid.from_bytes(requester)
     target_pid = link.decode(frames)
     # Ack immediately so the requester isn't blocked while we check the tombstone.
-    reply(router, requester, OK)
+    reply(router, requester, Cmd.OK)
 
     if target_pid in state.dead:
         # Target already gone — deliver the crash signal retroactively so the
@@ -86,7 +86,7 @@ def handle_monitor(
 ) -> None:
     target_pid = monitor.decode(frames)
     requester_pid = Pid.from_bytes(requester)
-    reply(router, requester, OK)
+    reply(router, requester, Cmd.OK)
 
     if target_pid in state.dead:
         # Same retroactive delivery as handle_link — the monitor guarantee is
@@ -112,4 +112,4 @@ def handle_emit(
     # Emitted values are surfaced to the host application via the queue rather
     # than being routed to another process, so they cross the VM boundary.
     state.emit_queue.put(emit.decode(frames))
-    reply(router, requester, OK)
+    reply(router, requester, Cmd.OK)

@@ -3,7 +3,7 @@ import pickle
 
 import zmq
 
-from tertius.constants import ERROR, OK
+from tertius.constants import Cmd
 from tertius.exceptions import DeadProcess, LinkedCrash, NormalExit, ProcessCrash
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
@@ -117,12 +117,12 @@ def handle_kill(
     target_pid = kill.decode(frames)
 
     if target_pid in state.dead:
-        reply(router, requester, ERROR, pickle.dumps(DeadProcess(target_pid)))
+        reply(router, requester, Cmd.ERROR, pickle.dumps(DeadProcess(target_pid)))
         return
 
     # Ack before terminating so the caller isn't blocked waiting on a process
     # that may take a moment to actually die.
-    reply(router, requester, OK)
+    reply(router, requester, Cmd.OK)
 
     proc = state.procs.pop(target_pid, None)
     if proc is not None:
@@ -155,4 +155,4 @@ def handle_crash(
 
     unbound, watchers, peers = _record_crash(state, notifier, crashed_pid, reason)
     _emit_crash_events(state, crashed_pid, unbound, watchers, peers)
-    reply(router, requester, OK)
+    reply(router, requester, Cmd.OK)

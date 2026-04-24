@@ -20,6 +20,7 @@ vm/
   broker_spawn.py        process spawning helpers
   broker_state.py        mutable VM state (pid registry, links, monitors)
   broker_utils.py        low-level ZMQ reply helpers
+  events.py              bookman event constructors for VM lifecycle telemetry
   messages.py            IPC message encoding
   process.py             process bootstrap and effect dispatch loop
   process_handlers.py    per-effect handlers run inside a process
@@ -90,10 +91,13 @@ for event in run(supervisor, scope={"count_server": count_server}):
 | `ESend(pid, body)` | Send a message to another process |
 | `EReceive()` | Block until a message arrives |
 | `EReceiveTimeout(timeout_ms)` | Receive a message or `None` on timeout |
+| `ESleep(ms)` | Sleep for `ms` milliseconds |
+| `EEmit(body)` | Emit a value to the caller of `run()` |
+| `EKill(pid)` | Terminate a process; delivers `ProcessCrash` to its monitors and `LinkedCrash` to linked processes |
 | `ERegister(name)` | Register the current process under a name |
 | `EWhereis(name)` | Look up a pid by name; returns `None` if not found |
-| `ELink(pid)` | Bidirectionally link to a process — if either crashes, the other dies too |
-| `EMonitor(pid)` | Receive a `ProcessCrash` if the target process crashes |
+| `ELink(pid)` | Bidirectionally link to a process - if either crashes, the other receives `LinkedCrash` |
+| `EMonitor(pid)` | Receive a `ProcessCrash` message if the target process crashes |
 
 ## Build
 

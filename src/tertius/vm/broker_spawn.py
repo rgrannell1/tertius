@@ -7,7 +7,7 @@ from typing import Any
 
 import zmq
 
-from tertius.constants import OK, READY, SPAWN_READY_TIMEOUT_MS
+from tertius.constants import Cmd, SPAWN_READY_TIMEOUT_MS
 from tertius.types import Pid, Scope
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
@@ -74,9 +74,9 @@ def _await_ready(
 
             child_requester, child_command = child_frames[0], child_frames[1]
 
-            if child_command == READY and child_requester == bytes(new_pid):
+            if child_command == Cmd.READY and child_requester == bytes(new_pid):
                 # The child process is ready — reply to the original spawn requester and return.
-                reply(router, child_requester, OK)
+                reply(router, child_requester, Cmd.OK)
                 break
 
             if child_command in handlers:

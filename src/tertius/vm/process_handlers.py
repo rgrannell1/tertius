@@ -7,7 +7,7 @@ from typing import Any
 
 import zmq
 
-from tertius.constants import ERROR
+from tertius.constants import Cmd
 from tertius.vm.broker_utils import ctrl_send
 from tertius.effects import (
     EEmit,
@@ -52,7 +52,7 @@ def _handle_spawn(ctrl: "zmq.Socket[bytes]", effect: ESpawn) -> Generator[None, 
     ctrl.send_multipart(spawn.encode(effect.fn_name, effect.args))
     reply = ctrl.recv_multipart()
 
-    if reply[0] == ERROR:
+    if reply[0] == Cmd.ERROR:
         raise pickle.loads(reply[1])
 
     return pid_reply.decode(reply)
@@ -149,7 +149,7 @@ def _handle_emit(ctrl: "zmq.Socket[bytes]", effect: EEmit) -> Generator[None, An
 def _handle_kill(ctrl: "zmq.Socket[bytes]", effect: EKill) -> Generator[None, Any, None]:
     ctrl.send_multipart(kill.encode(effect.pid))
     response = ctrl.recv_multipart()
-    if response[0] == ERROR:
+    if response[0] == Cmd.ERROR:
         raise pickle.loads(response[1])
     return
     yield

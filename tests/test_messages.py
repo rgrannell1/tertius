@@ -2,7 +2,7 @@
 from hypothesis import given
 from hypothesis import strategies as st
 
-from tertius.constants import SPAWN
+from tertius.constants import Cmd
 from tertius.types import Pid
 from tertius.vm.messages import (
     crash,
@@ -67,7 +67,7 @@ def test_frame_accessors_decompose_correctly(pid, fn_name, args):
 
     frames = router_wrap(spawn.encode(fn_name, args), identity=bytes(pid))
     assert frame_id(frames) == bytes(pid)
-    assert frame_command(frames) == SPAWN
+    assert frame_command(frames) == Cmd.SPAWN
     assert frame_payload(frames) == frames[2:]
 
 

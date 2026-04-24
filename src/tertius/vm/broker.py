@@ -8,17 +8,7 @@ from typing import Any
 
 import zmq
 
-from tertius.constants import (
-    CRASH,
-    EMIT,
-    ERROR,
-    KILL,
-    LINK,
-    MONITOR,
-    REGISTER,
-    SPAWN,
-    WHEREIS,
-)
+from tertius.constants import Cmd
 from tertius.types import Pid, Scope
 from tertius.vm.broker_crash import handle_crash, handle_kill
 from tertius.vm.broker_utils import reply
@@ -95,7 +85,7 @@ def _dispatch_command(
         # Send the exception back to the caller rather than crashing
         # the broker — one bad request shouldn't take down the VM.
         try:
-            reply(router, requester, ERROR, pickle.dumps(err))
+            reply(router, requester, Cmd.ERROR, pickle.dumps(err))
         except zmq.ZMQError as zmq_err:
             if _is_shutdown_error(zmq_err):
                 return False
@@ -130,16 +120,16 @@ def make_ctrl_handlers(
     """Factory for control command handlers."""
 
     handlers: dict[bytes, Callable[..., None]] = {}
-    handlers[SPAWN] = partial(
+    handlers[Cmd.SPAWN] = partial(
         handle_spawn, alloc_pid, scope, broker_addr, ctrl_addr, state, handlers
     )
-    handlers[REGISTER] = partial(handle_register, state)
-    handlers[WHEREIS] = partial(handle_whereis, state)
-    handlers[LINK] = partial(handle_link, state, notifier)
-    handlers[MONITOR] = partial(handle_monitor, state, notifier)
-    handlers[EMIT] = partial(handle_emit, state)
-    handlers[KILL] = partial(handle_kill, state, notifier)
-    handlers[CRASH] = partial(handle_crash, state, notifier)
+    handlers[Cmd.REGISTER] = partial(handle_register, state)
+    handlers[Cmd.WHEREIS] = partial(handle_whereis, state)
+    handlers[Cmd.LINK] = partial(handle_link, state, notifier)
+    handlers[Cmd.MONITOR] = partial(handle_monitor, state, notifier)
+    handlers[Cmd.EMIT] = partial(handle_emit, state)
+    handlers[Cmd.KILL] = partial(handle_kill, state, notifier)
+    handlers[Cmd.CRASH] = partial(handle_crash, state, notifier)
 
     return handlers
 
