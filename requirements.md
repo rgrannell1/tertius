@@ -1,0 +1,1 @@
+All process-level effect handlers in `process_handlers.py` are generator functions, consistent with the coordination handlers (`InitHandler`, `CastHandler`, `CallHandler`, `InfoHandler`) defined in `genserver_types.py`. Where a handler has no effects to yield, a dangling unreachable `yield` makes the function a generator. The observable behaviour of the VM is unchanged.

@@ -1,5 +1,6 @@
 # VM entry point — wires the broker, process threads, and effect handlers together.
 import hashlib
+import itertools
 import os
 import queue
 import socket
@@ -22,6 +23,7 @@ def make_node_id(host: str, port: int) -> int:
     return int.from_bytes(digest[:4], "big")
 
 _DONE = object()
+_vm_id = itertools.count().__next__
 
 
 def _root_thread(
@@ -48,8 +50,9 @@ def _root_thread(
 class VM:
     def __init__(self, scope: Scope) -> None:
         vm_pid = os.getpid()
-        self._broker_addr = f"ipc:///tmp/tertius-{vm_pid}-data.sock"
-        self._ctrl_addr = f"ipc:///tmp/tertius-{vm_pid}-ctrl.sock"
+        vm_instance = _vm_id()
+        self._broker_addr = f"ipc:///tmp/tertius-{vm_pid}-{vm_instance}-data.sock"
+        self._ctrl_addr = f"ipc:///tmp/tertius-{vm_pid}-{vm_instance}-ctrl.sock"
         self._ctx: zmq.Context[zmq.Socket[bytes]] = zmq.Context()
         # vm_pid stands in for a port until the broker binds a TCP address
         node_id = make_node_id(socket.gethostname(), vm_pid)
