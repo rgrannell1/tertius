@@ -8,6 +8,12 @@ from typing import Any
 
 import zmq
 
+
+def _is_shutdown_error(err: zmq.ZMQError) -> bool:
+    # ctx.destroy(linger=0) closes sockets immediately, so recv/send raises ENOTSOCK
+    # rather than ETERM. Both mean the VM is shutting down — exit the loop cleanly.
+    return err.errno in (zmq.ETERM, zmq.ENOTSOCK)
+
 from tertius.constants import (
     CRASH,
     EMIT,
@@ -126,7 +132,7 @@ class Broker:
             try:
                 _sender, target, sender_pid, body = router.recv_multipart()
             except zmq.ZMQError as err:
-                if err.errno == zmq.ETERM:
+                if _is_shutdown_error(err):
                     return
                 raise
             router.send_multipart([target, sender_pid, body])
@@ -168,7 +174,7 @@ class Broker:
             try:
                 frames = router.recv_multipart()
             except zmq.ZMQError as err:
-                if err.errno == zmq.ETERM:
+                if _is_shutdown_error(err):
                     return
                 raise
             requester = frames[0]
@@ -177,7 +183,16 @@ class Broker:
             if command in handlers:
                 try:
                     handlers[command](router, requester, frames)
+                except zmq.ZMQError as err:
+                    if _is_shutdown_error(err):
+                        return
+                    raise
                 except Exception as err:
                     # Send the exception back to the caller rather than crashing
                     # the broker — one bad request shouldn't take down the VM.
-                    reply(router, requester, ERROR, pickle.dumps(err))
+                    try:
+                        reply(router, requester, ERROR, pickle.dumps(err))
+                    except zmq.ZMQError as zmq_err:
+                        if _is_shutdown_error(zmq_err):
+                            return
+                        raise
