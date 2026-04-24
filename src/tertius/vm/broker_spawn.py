@@ -1,5 +1,6 @@
 # Broker spawn handler — starts new OS processes and waits for them to signal readiness.
 import multiprocessing
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -9,8 +10,13 @@ from tertius.constants import OK, READY, SPAWN_READY_TIMEOUT_MS
 from tertius.types import Pid, Scope
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
+from tertius.vm.events import spawn_ready, spawn_started, spawn_timeout
 from tertius.vm.messages import pid_reply, spawn
 from tertius.vm.process import process_entry
+
+
+_SPAWN_CTX = multiprocessing.get_context("spawn")
+
 
 def _start_process(
     pid: Pid,
@@ -22,7 +28,9 @@ def _start_process(
     state: BrokerState,
 ) -> multiprocessing.Process:
     # Daemon=True so child processes don't outlive the broker if it exits uncleanly.
-    proc = multiprocessing.Process(
+    # spawn (not fork) avoids inheriting the parent's ZMQ IO threads, which
+    # causes libzmq to abort() when the child later calls zmq_msg_recv.
+    proc = _SPAWN_CTX.Process(
         target=process_entry,
         args=(pid.node_id, pid.id, broker_addr, ctrl_addr, fn_name, args, scope),
         daemon=True,
@@ -93,8 +101,17 @@ def handle_spawn(
         raise KeyError(f"ESpawn: {fn_name!r} not in scope; available: {sorted(scope)}")
 
     new_pid = alloc_pid()
+    spawn_start = time.time()
     proc = _start_process(new_pid, fn_name, args, broker_addr, ctrl_addr, scope, state)
-    # Block until the process is ready before replying to the caller, so the
-    # caller can safely send to the new pid immediately after receiving its pid back.
-    _await_ready(router, proc, new_pid, fn_name, handlers)
+    state.emit_queue.put(spawn_started(new_pid))
+
+    try:
+        # Block until the process is ready before replying to the caller, so the
+        # caller can safely send to the new pid immediately after receiving its pid back.
+        _await_ready(router, proc, new_pid, fn_name, handlers)
+    except RuntimeError:
+        state.emit_queue.put(spawn_timeout(new_pid, fn_name, proc.exitcode))
+        raise
+
+    state.emit_queue.put(spawn_ready(new_pid, spawn_start))
     reply(router, requester, *pid_reply.encode(new_pid))

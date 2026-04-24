@@ -4,7 +4,7 @@ import time
 from collections.abc import Generator
 from typing import Any
 
-from tertius.effects import EEmit, EReceiveTimeout, ESelf, ESpawn
+from tertius.effects import EReceiveTimeout, ESelf, ESpawn
 from tertius.genserver import mcast
 from tertius.types import CastMsg, Envelope, Pid
 from tertius.vm import run
@@ -29,22 +29,21 @@ def send_after_delay(
 # ---------------------------------------------------------------------------
 
 
-def _root_no_message() -> Generator[Any, Any, None]:
-    result = yield EReceiveTimeout(timeout_ms=50)
-    yield EEmit(result)
+def _root_no_message() -> Generator[Any, Any, Any]:
+    return (yield EReceiveTimeout(timeout_ms=50))
 
 
 _SCOPE = {"send_after_delay": send_after_delay}
 
 
-def test_receive_timeout_returns_none_when_no_message():
+def test_receive_timeout_returns_none_when_no_message(collect):
     """Proves that EReceiveTimeout returns None when no message arrives within the window."""
 
-    result = next(run(_root_no_message, scope=_SCOPE))
+    result, _ = collect(_root_no_message, scope=_SCOPE)
     assert result is None
 
 
-def _root_message_arrives_in_time() -> Generator[Any, Any, None]:
+def _root_message_arrives_in_time() -> Generator[Any, Any, Any]:
     me: Pid = yield ESelf()
 
     yield ESpawn(
@@ -56,13 +55,13 @@ def _root_message_arrives_in_time() -> Generator[Any, Any, None]:
 
     match envelope:
         case Envelope(body=CastMsg(body=body)):
-            yield EEmit(body)
+            return body
         case None:
-            yield EEmit("timed-out")
+            return "timed-out"
 
 
-def test_receive_timeout_returns_message_when_it_arrives():
+def test_receive_timeout_returns_message_when_it_arrives(collect):
     """Proves that EReceiveTimeout returns the envelope when a message arrives before the deadline."""
 
-    result = next(run(_root_message_arrives_in_time, scope=_SCOPE))
+    result, _ = collect(_root_message_arrives_in_time, scope=_SCOPE)
     assert result == "on-time"

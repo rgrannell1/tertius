@@ -48,33 +48,33 @@ def run_counter(initial: int) -> Generator[Any, Any, None]:
 # ---------------------------------------------------------------------------
 
 
-def _root_cast_then_call() -> Generator[Any, Any, None]:
+def _root_cast_then_call() -> Generator[Any, Any, Any]:
     server: Pid = yield ESpawn(
         fn_name="run_counter",
         args=(0,),
     )
     yield from mcast(server, ("inc", 5))
     yield from mcast(server, ("inc", 3))
-    yield EEmit((yield from mcall(server, "get")))
+    return (yield from mcall(server, "get"))
 
 
-def _root_call_does_not_mutate() -> Generator[Any, Any, None]:
+def _root_call_does_not_mutate() -> Generator[Any, Any, Any]:
     server: Pid = yield ESpawn(
         fn_name="run_counter",
         args=(10,),
     )
     first = yield from mcall(server, "get")
     second = yield from mcall(server, "get")
-    yield EEmit((first, second))
+    return (first, second)
 
 
-def _root_unknown_cast_ignored() -> Generator[Any, Any, None]:
+def _root_unknown_cast_ignored() -> Generator[Any, Any, Any]:
     server: Pid = yield ESpawn(
         fn_name="run_counter",
         args=(7,),
     )
     yield from mcast(server, "unknown-message")
-    yield EEmit((yield from mcall(server, "get")))
+    return (yield from mcall(server, "get"))
 
 
 # ---------------------------------------------------------------------------
@@ -85,24 +85,25 @@ def _root_unknown_cast_ignored() -> Generator[Any, Any, None]:
 _SCOPE = {"run_counter": run_counter}
 
 
-def test_cast_accumulates_state_across_processes():
+def test_cast_accumulates_state_across_processes(collect):
     """Proves that cast messages mutate gen_server state in a real process."""
 
-    result = next(run(_root_cast_then_call, scope=_SCOPE))
+    result, _ = collect(_root_cast_then_call, scope=_SCOPE)
     assert result == 8
 
 
-def test_call_does_not_mutate_state_across_processes():
+def test_call_does_not_mutate_state_across_processes(collect):
     """Proves that two consecutive get calls return the same value in a real process."""
 
-    first, second = next(run(_root_call_does_not_mutate, scope=_SCOPE))
+    result, _ = collect(_root_call_does_not_mutate, scope=_SCOPE)
+    first, second = result
     assert first == second == 10
 
 
-def test_unknown_cast_leaves_state_unchanged_across_processes():
+def test_unknown_cast_leaves_state_unchanged_across_processes(collect):
     """Proves that an unrecognised cast body leaves state intact in a real process."""
 
-    result = next(run(_root_unknown_cast_ignored, scope=_SCOPE))
+    result, _ = collect(_root_unknown_cast_ignored, scope=_SCOPE)
     assert result == 7
 
 
@@ -111,31 +112,31 @@ def test_unknown_cast_leaves_state_unchanged_across_processes():
 # ---------------------------------------------------------------------------
 
 
-def _root_call_timeout_succeeds() -> Generator[Any, Any, None]:
+def _root_call_timeout_succeeds() -> Generator[Any, Any, Any]:
     server: Pid = yield ESpawn(
         fn_name="run_counter",
         args=(42,),
     )
-    yield EEmit((yield from mcall_timeout(server, "get", timeout_ms=2000)))
+    return (yield from mcall_timeout(server, "get", timeout_ms=2000))
 
 
-def _root_call_timeout_fires() -> Generator[Any, Any, None]:
+def _root_call_timeout_fires() -> Generator[Any, Any, Any]:
     """Call a process that doesn't exist — timeout must fire."""
     ghost = Pid(node_id=0, id=99999)
-    yield EEmit((yield from mcall_timeout(ghost, "get", timeout_ms=50)))
+    return (yield from mcall_timeout(ghost, "get", timeout_ms=50))
 
 
-def test_call_timeout_returns_reply_when_server_is_alive():
+def test_call_timeout_returns_reply_when_server_is_alive(collect):
     """Proves that call_timeout returns the reply when the server responds in time."""
 
-    result = next(run(_root_call_timeout_succeeds, scope=_SCOPE))
+    result, _ = collect(_root_call_timeout_succeeds, scope=_SCOPE)
     assert result == 42
 
 
-def test_call_timeout_returns_none_when_server_is_unreachable():
+def test_call_timeout_returns_none_when_server_is_unreachable(collect):
     """Proves that call_timeout returns None when no reply arrives within the deadline."""
 
-    result = next(run(_root_call_timeout_fires, scope=_SCOPE))
+    result, _ = collect(_root_call_timeout_fires, scope=_SCOPE)
     assert result is None
 
 
@@ -183,9 +184,9 @@ def _root_emitting_cast() -> Generator[Any, Any, None]:
     yield EEmit(("final", result))
 
 
-def _root_sleeping_init() -> Generator[Any, Any, None]:
+def _root_sleeping_init() -> Generator[Any, Any, Any]:
     server: Pid = yield ESpawn(fn_name="run_sleeping_init_counter", args=(99,))
-    yield EEmit((yield from mcall(server, "get")))
+    return (yield from mcall(server, "get"))
 
 
 _EFFECTFUL_SCOPE = {
@@ -202,8 +203,8 @@ def test_handler_can_emit_telemetry_as_side_effect():
     assert ("final", 5) in events
 
 
-def test_generator_init_can_yield_process_effects():
+def test_generator_init_can_yield_process_effects(collect):
     """Proves that a generator init function can yield effects handled by the process runtime."""
 
-    result = next(run(_root_sleeping_init, scope=_EFFECTFUL_SCOPE))
+    result, _ = collect(_root_sleeping_init, scope=_EFFECTFUL_SCOPE)
     assert result == 99

@@ -1,6 +1,12 @@
 # Low-level ZMQ socket utilities shared across broker modules.
 import zmq
 
+from tertius.types import Pid
+
+
+def pid_hex(pid: Pid) -> str:
+    return bytes(pid).hex()
+
 
 def reply(socket: "zmq.Socket[bytes]", requester: bytes, *frames: bytes) -> None:
     socket.send_multipart([requester, *frames])

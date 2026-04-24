@@ -3,16 +3,15 @@
 from collections.abc import Generator
 from typing import Any
 
-from tertius.effects import EEmit, EReceive, ESelf, ESpawn
+from tertius.effects import EReceive, ESelf, ESpawn
 from tertius.types import CastMsg, Envelope, Pid
-from tertius.vm import run
 from tests.fixtures import run_marco_polo_and_report
 
 _SCOPE = {"run_marco_polo_and_report": run_marco_polo_and_report}
 
 
-def root(num_workers: int) -> Generator[Any, Any, None]:
-    """Spawn n worker processes, collect their results, emit them."""
+def root(num_workers: int) -> Generator[Any, Any, list[Any]]:
+    """Spawn n worker processes, collect their results, return them."""
 
     me: Pid = yield ESelf()
 
@@ -30,12 +29,12 @@ def root(num_workers: int) -> Generator[Any, Any, None]:
             case CastMsg(body=body):
                 results.append(body)
 
-    yield EEmit(results)
+    return results
 
 
-def test_three_marco_polo_processes():
+def test_three_marco_polo_processes(collect):
     """Proves three independent processes each produce (3, 3) via marco polo."""
 
-    results = next(run(root, 3, scope=_SCOPE))
+    results, _ = collect(root, 3, scope=_SCOPE)
     assert len(results) == 3
     assert all(res == (3, 3) for res in results), results

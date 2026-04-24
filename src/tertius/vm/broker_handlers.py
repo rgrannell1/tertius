@@ -6,6 +6,13 @@ from tertius.exceptions import LinkedCrash, ProcessCrash
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
+from tertius.vm.events import (
+    link_established,
+    link_retroactive,
+    monitor_established,
+    monitor_retroactive,
+    name_registered,
+)
 from tertius.vm.messages import (
     emit,
     encode_crash_notification,
@@ -26,7 +33,10 @@ def handle_register(
 ) -> None:
     # Names are process-scoped: the pid is derived from the requester identity
     # rather than the message body, so a process can only register itself.
-    state.names[register.decode(frames)] = Pid.from_bytes(requester)
+    registered_name = register.decode(frames)
+    pid = Pid.from_bytes(requester)
+    state.names[registered_name] = pid
+    state.emit_queue.put(name_registered(pid, registered_name))
     reply(router, requester, OK)
 
 
@@ -59,10 +69,12 @@ def handle_link(
         notifier.send_multipart(
             encode_linked_crash_notification(requester_pid, target_pid, kill_msg)
         )
+        state.emit_queue.put(link_retroactive(target_pid))
         return
 
     state.links.setdefault(requester_pid, set()).add(target_pid)
     state.links.setdefault(target_pid, set()).add(requester_pid)
+    state.emit_queue.put(link_established(requester_pid))
 
 
 def handle_monitor(
@@ -84,9 +96,11 @@ def handle_monitor(
         notifier.send_multipart(
             encode_crash_notification(requester_pid, target_pid, crash_msg)
         )
+        state.emit_queue.put(monitor_retroactive(target_pid))
         return
 
     state.monitors.setdefault(target_pid, set()).add(requester_pid)
+    state.emit_queue.put(monitor_established(requester_pid))
 
 
 def handle_emit(

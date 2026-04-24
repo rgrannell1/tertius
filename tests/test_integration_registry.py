@@ -4,7 +4,7 @@ from tertius.genserver import mcast
 from collections.abc import Generator
 from typing import Any
 
-from tertius.effects import EEmit, EReceive, ERegister, ESpawn, EWhereis
+from tertius.effects import EReceive, ERegister, ESpawn, EWhereis
 from tertius.types import CastMsg, Envelope, Pid
 from tertius.vm import run
 
@@ -30,7 +30,7 @@ def register_and_wait(name: str) -> Generator[Any, Any, None]:
 # ---------------------------------------------------------------------------
 
 
-def _root_whereis_found(name: str) -> Generator[Any, Any, None]:
+def _root_whereis_found(name: str) -> Generator[Any, Any, Pid]:
     yield ESpawn(
         fn_name="register_and_wait",
         args=(name,),
@@ -39,33 +39,31 @@ def _root_whereis_found(name: str) -> Generator[Any, Any, None]:
     while True:
         result: Pid | None = yield EWhereis(name=name)
         if result is not None:
-            yield EEmit(result)
-            return
+            return result
 
 
 _SCOPE = {"register_and_wait": register_and_wait}
 
 
-def test_whereis_returns_pid_of_registered_process():
+def test_whereis_returns_pid_of_registered_process(collect):
     """Proves that a process registered under a name is findable via EWhereis."""
 
-    result = next(run(_root_whereis_found, "echo-worker", scope=_SCOPE))
+    result, _ = collect(_root_whereis_found, "echo-worker", scope=_SCOPE)
     assert isinstance(result, Pid)
 
 
-def _root_whereis_unknown() -> Generator[Any, Any, None]:
-    result = yield EWhereis(name="no-such-process")
-    yield EEmit(result)
+def _root_whereis_unknown() -> Generator[Any, Any, Any]:
+    return (yield EWhereis(name="no-such-process"))
 
 
-def test_whereis_returns_none_for_unknown_name():
+def test_whereis_returns_none_for_unknown_name(collect):
     """Proves that EWhereis returns None when no process is registered under the name."""
 
-    result = next(run(_root_whereis_unknown, scope=_SCOPE))
+    result, _ = collect(_root_whereis_unknown, scope=_SCOPE)
     assert result is None
 
 
-def _root_roundtrip(name: str) -> Generator[Any, Any, None]:
+def _root_roundtrip(name: str) -> Generator[Any, Any, Any]:
     """Register a named echo worker, send it a message, collect the reply."""
 
     yield ESpawn(
@@ -83,11 +81,11 @@ def _root_roundtrip(name: str) -> Generator[Any, Any, None]:
     envelope: Envelope = yield EReceive()
     match envelope.body:
         case CastMsg(body=body):
-            yield EEmit(body)
+            return body
 
 
-def test_message_via_registered_name_roundtrips():
+def test_message_via_registered_name_roundtrips(collect):
     """Proves that a message sent to a pid resolved by name arrives & gets a return message."""
 
-    result = next(run(_root_roundtrip, "echo-worker-2", scope=_SCOPE))
+    result, _ = collect(_root_roundtrip, "echo-worker-2", scope=_SCOPE)
     assert result == "hello"

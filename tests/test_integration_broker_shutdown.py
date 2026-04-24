@@ -39,6 +39,6 @@ def test_broker_context_is_terminated_after_vm_completes():
     # The fix has VM.start() call broker.stop() which terminates the context
     # before the VM goes out of scope.
     vm = VM(scope=_SCOPE)
-    results = list(vm.start(root_with_background_spawn, ()))
-    assert results == ["started"]
+    events = list(vm.start(root_with_background_spawn, ()))
+    assert "started" in events
     assert vm._broker._ctx.closed, "Broker context should be terminated after VM completes"

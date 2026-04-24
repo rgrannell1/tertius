@@ -4,7 +4,7 @@ from collections.abc import Generator
 from typing import Any
 
 from tertius.genserver import gen_server, mcall, mcast
-from tertius.effects import EEmit, EReceive, ESelf, ESpawn
+from tertius.effects import EReceive, ESelf, ESpawn
 from tertius.types import CastMsg, Envelope, Pid
 from tertius.vm import run
 
@@ -50,7 +50,7 @@ def caller(
 # ---------------------------------------------------------------------------
 
 
-def _root_concurrent_calls() -> Generator[Any, Any, None]:
+def _root_concurrent_calls() -> Generator[Any, Any, list[str]]:
     me: Pid = yield ESelf()
     server: Pid = yield ESpawn(fn_name="run_echo")
 
@@ -70,7 +70,7 @@ def _root_concurrent_calls() -> Generator[Any, Any, None]:
             case CastMsg(body=body):
                 results.append(body)
 
-    yield EEmit(sorted(results))
+    return sorted(results)
 
 
 _SCOPE = {"run_echo": run_echo, "caller": caller}
@@ -80,8 +80,8 @@ _SCOPE = {"run_echo": run_echo, "caller": caller}
 # ---------------------------------------------------------------------------
 
 
-def test_concurrent_callers_each_receive_correct_reply():
+def test_concurrent_callers_each_receive_correct_reply(collect):
     """Proves that two concurrent callers each receive their own reply, not each other's."""
 
-    results = next(run(_root_concurrent_calls, scope=_SCOPE))
+    results, _ = collect(_root_concurrent_calls, scope=_SCOPE)
     assert results == ["hello", "world"]

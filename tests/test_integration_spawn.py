@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from tertius.effects import EEmit, ESpawn
+from tertius.effects import ESpawn
 from tertius.vm import run
 
 
@@ -20,7 +20,7 @@ def immediate_return() -> Generator[Any, Any, None]:
 
 
 def emitting_job() -> Generator[Any, Any, None]:
-    yield EEmit("hello")
+    yield
 
 
 def crashing_job() -> Generator[Any, Any, None]:
@@ -33,23 +33,21 @@ def crashing_job() -> Generator[Any, Any, None]:
 # ---------------------------------------------------------------------------
 
 
-def _root_spawn_and_emit() -> Generator[Any, Any, None]:
+def _root_spawn_and_emit() -> Generator[Any, Any, str]:
     yield ESpawn(fn_name="immediate_return")
-    yield EEmit("done")
+    return "done"
 
 
-def test_spawn_starts_process_successfully():
+def test_spawn_starts_process_successfully(collect):
     """Proves ESpawn starts a process that runs to completion."""
 
-    result = next(
-        run(_root_spawn_and_emit, scope={"immediate_return": immediate_return})
-    )
+    result, _ = collect(_root_spawn_and_emit, scope={"immediate_return": immediate_return})
     assert result == "done"
 
 
-def _root_spawn_unknown() -> Generator[Any, Any, None]:
+def _root_spawn_unknown() -> Generator[Any, Any, str]:
     yield ESpawn(fn_name="no_such_fn")
-    yield EEmit("done")
+    return "done"
 
 
 def test_spawn_unknown_fn_raises():
@@ -59,13 +57,13 @@ def test_spawn_unknown_fn_raises():
         next(run(_root_spawn_unknown, scope={}))
 
 
-def _root_spawn_crashing() -> Generator[Any, Any, None]:
+def _root_spawn_crashing() -> Generator[Any, Any, str]:
     yield ESpawn(fn_name="crashing_job")
-    yield EEmit("done")
+    return "done"
 
 
-def test_spawn_process_that_crashes_raises_runtime_error():
+def test_spawn_process_that_crashes_raises_runtime_error(collect):
     """Proves ESpawn raises RuntimeError when the spawned process dies before sending READY."""
 
     with pytest.raises(RuntimeError, match="crashing_job.*died before sending READY"):
-        next(run(_root_spawn_crashing, scope={"crashing_job": crashing_job}))
+        collect(_root_spawn_crashing, scope={"crashing_job": crashing_job})

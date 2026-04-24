@@ -3,7 +3,7 @@
 from collections.abc import Generator
 from typing import Any
 
-from tertius.effects import EEmit, EMonitor, EReceive, ERegister, ESpawn, EWhereis
+from tertius.effects import EMonitor, EReceive, ERegister, ESpawn, EWhereis
 from tertius.types import Pid
 from tertius.vm import run
 
@@ -24,15 +24,14 @@ def register_then_crash(name: str) -> Generator[Any, Any, None]:
 # ---------------------------------------------------------------------------
 
 
-def _root_stale_name(name: str) -> Generator[Any, Any, None]:
+def _root_stale_name(name: str) -> Generator[Any, Any, Any]:
     worker: Pid = yield ESpawn(
         fn_name="register_then_crash",
         args=(name,),
     )
     yield EMonitor(pid=worker)
     yield EReceive()
-    result = yield EWhereis(name=name)
-    yield EEmit(result)
+    return (yield EWhereis(name=name))
 
 
 # ---------------------------------------------------------------------------
@@ -43,8 +42,8 @@ def _root_stale_name(name: str) -> Generator[Any, Any, None]:
 _SCOPE = {"register_then_crash": register_then_crash}
 
 
-def test_whereis_returns_none_after_registered_process_crashes():
+def test_whereis_returns_none_after_registered_process_crashes(collect):
     """Proves that EWhereis returns None after the named process has crashed."""
 
-    result = next(run(_root_stale_name, "doomed-worker", scope=_SCOPE))
+    result, _ = collect(_root_stale_name, "doomed-worker", scope=_SCOPE)
     assert result is None

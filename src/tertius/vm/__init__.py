@@ -34,10 +34,12 @@ def _root_thread(
     ctrl: "zmq.Socket[bytes]",
     ctx: "zmq.Context[zmq.Socket[bytes]]",
     root_exc: list[BaseException],
+    root_result: list[Any],
     emit_queue: "queue.Queue[Any]",
 ) -> None:
     try:
-        complete(fn(*args), **make_handlers(root_pid, dealer, ctrl))
+        result = complete(fn(*args), **make_handlers(root_pid, dealer, ctrl))
+        root_result.append(result)
     except Exception as err:
         root_exc.append(err)
     finally:
@@ -60,7 +62,7 @@ class VM:
 
     def start(
         self, fn: Callable[..., Any], args: tuple[Any, ...]
-    ) -> Generator[Any, None, None]:
+    ) -> Generator[Any, None, Any]:
         threading.Thread(target=self._broker.run_data, daemon=True).start()
         threading.Thread(target=self._broker.run_control, daemon=True).start()
         self._broker.ready.wait()
@@ -77,26 +79,29 @@ class VM:
         ctrl.connect(self._ctrl_addr)
 
         root_exc: list[BaseException] = []
+        root_result: list[Any] = []
 
         threading.Thread(
             target=partial(
-                _root_thread, fn, args, root_pid, dealer, ctrl, ctx, root_exc,
+                _root_thread, fn, args, root_pid, dealer, ctrl, ctx, root_exc, root_result,
                 self._broker.emit_queue,
             ),
             daemon=True,
         ).start()
 
-        while True:
-            event = self._broker.emit_queue.get()
-            if event is _DONE:
-                self._broker.stop()
-                if root_exc:
-                    raise root_exc[0]
-                return
-            yield event
+        try:
+            while True:
+                event = self._broker.emit_queue.get()
+                if event is _DONE:
+                    if root_exc:
+                        raise root_exc[0]
+                    return root_result[0] if root_result else None
+                yield event
+        finally:
+            self._broker.stop()
 
 
 def run(
     fn: Callable[..., Any], *args: Any, scope: Scope | None = None
-) -> Generator[Any, None, None]:
-    yield from VM(scope or {}).start(fn, args)
+) -> Generator[Any, None, Any]:
+    return (yield from VM(scope or {}).start(fn, args))
