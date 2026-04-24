@@ -26,6 +26,15 @@ _DONE = object()
 _vm_id = itertools.count().__next__
 
 
+def _drain_queue(emit_queue: "queue.Queue[Any]") -> Generator[Any, None, None]:
+    """Yield all events left in the emit queue after broker shutdown."""
+    while True:
+        try:
+            yield emit_queue.get_nowait()
+        except queue.Empty:
+            return
+
+
 def _root_thread(
     fn: Callable[..., Any],
     args: tuple[Any, ...],
@@ -89,16 +98,23 @@ class VM:
             daemon=True,
         ).start()
 
+        broker_stopped = False
         try:
             while True:
                 event = self._broker.emit_queue.get()
                 if event is _DONE:
                     if root_exc:
                         raise root_exc[0]
+                    # Stop the broker before declaring done — it may emit spawn_timeout
+                    # events during shutdown that must be captured before collect returns.
+                    self._broker.stop()
+                    broker_stopped = True
+                    yield from _drain_queue(self._broker.emit_queue)
                     return root_result[0] if root_result else None
                 yield event
         finally:
-            self._broker.stop()
+            if not broker_stopped:
+                self._broker.stop()
 
 
 def run(

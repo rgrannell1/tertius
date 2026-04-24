@@ -69,7 +69,7 @@ counter = gen_server(init=_init, handle_cast=_cast, handle_call=_call)
 SENDER = Pid(node_id=0, id=99)
 
 
-def _pop_inbox(inbox: list, _effect: EReceive) -> Envelope:
+def _pop_inbox(inbox: list, effect: EReceive) -> Envelope:
     return inbox.pop(0)
 
 

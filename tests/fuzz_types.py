@@ -62,6 +62,45 @@ class EmitAction:
     body: Any
 
 
+@dataclass(frozen=True)
+class GetSelfAction:
+    """Yield ESelf() and add root's PID to the pool so it can be targeted."""
+
+
+@dataclass(frozen=True)
+class FakePidAction:
+    """Insert a randomly-constructed PID into the pool.
+
+    This PID has never been spawned and has no tombstone — it exercises
+    ghost-kill, dangling-link, and non-existent-monitor code paths.
+    """
+
+    node_id: int
+    pid_id: int
+
+
+@dataclass(frozen=True)
+class SpawnLinkerAction:
+    """Spawn a linker_worker that links to a specific target PID then waits.
+
+    Forces worker-to-worker links so crash cascades propagate through the
+    broker rather than only through the root process.
+    """
+
+    target_idx: int
+
+
+@dataclass(frozen=True)
+class SleepAction:
+    """Sleep the root process for ms milliseconds.
+
+    Creates a timing window where background worker operations (crashes,
+    exits, sends) can advance concurrently while the root is paused.
+    """
+
+    ms: int
+
+
 FuzzAction = (
     SpawnAction
     | KillAction
@@ -71,6 +110,10 @@ FuzzAction = (
     | RegisterAction
     | WhereisAction
     | EmitAction
+    | GetSelfAction
+    | FakePidAction
+    | SpawnLinkerAction
+    | SleepAction
 )
 
 

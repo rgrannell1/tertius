@@ -99,8 +99,10 @@ def _emit_crash_events(
 ) -> None:
     for name in unbound:
         state.emit_queue.put(name_unbound(pid, name))
+
     for _watcher in watchers:
         state.emit_queue.put(monitor_delivered(pid))
+
     for _peer in peers:
         state.emit_queue.put(link_delivered(pid))
 

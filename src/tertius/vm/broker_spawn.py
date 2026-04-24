@@ -2,6 +2,7 @@
 import multiprocessing
 import time
 from collections.abc import Callable
+from multiprocessing.process import BaseProcess
 from typing import Any
 
 import zmq
@@ -26,7 +27,7 @@ def _start_process(
     ctrl_addr: str,
     scope: Scope,
     state: BrokerState,
-) -> multiprocessing.Process:
+) -> BaseProcess:
     # Daemon=True so child processes don't outlive the broker if it exits uncleanly.
     # spawn (not fork) avoids inheriting the parent's ZMQ IO threads, which
     # causes libzmq to abort() when the child later calls zmq_msg_recv.
@@ -42,7 +43,7 @@ def _start_process(
 
 def _await_ready(
     router: "zmq.Socket[bytes]",
-    proc: multiprocessing.Process,
+    proc: BaseProcess,
     new_pid: Pid,
     fn_name: str,
     handlers: dict,
@@ -109,7 +110,9 @@ def handle_spawn(
         # Block until the process is ready before replying to the caller, so the
         # caller can safely send to the new pid immediately after receiving its pid back.
         _await_ready(router, proc, new_pid, fn_name, handlers)
-    except RuntimeError:
+    except (RuntimeError, zmq.ZMQError):
+        # ZMQError covers broker shutdown racing with _await_ready — still emit
+        # the timeout event so the telemetry stream is always closed.
         state.emit_queue.put(spawn_timeout(new_pid, fn_name, proc.exitcode))
         raise
 
