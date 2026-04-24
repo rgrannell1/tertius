@@ -89,6 +89,7 @@ class VM:
         while True:
             event = self._broker.emit_queue.get()
             if event is _DONE:
+                self._broker.stop()
                 if root_exc:
                     raise root_exc[0]
                 return

@@ -100,6 +100,15 @@ class Broker:
             self._next_pid += 1
             return pid
 
+    def stop(self) -> None:
+        """Terminate the broker context, unblocking and exiting both broker threads.
+
+        ZMQ's destroy(linger=0) closes all open sockets immediately and calls
+        ctx.term(), which causes any blocking recv_multipart() calls on those
+        sockets to raise ZMQError. The recv loops catch that and exit cleanly.
+        """
+        self._ctx.destroy(linger=0)
+
     def run_data(self) -> None:
         """Blind message relay between processes.
 
@@ -109,11 +118,17 @@ class Broker:
         """
 
         router: zmq.Socket[bytes] = self._ctx.socket(zmq.ROUTER)
+        router.setsockopt(zmq.LINGER, 0)
         router.bind(self._broker_addr)
         self.ready.set()
 
         while True:
-            _sender, target, sender_pid, body = router.recv_multipart()
+            try:
+                _sender, target, sender_pid, body = router.recv_multipart()
+            except zmq.ZMQError as err:
+                if err.errno == zmq.ETERM:
+                    return
+                raise
             router.send_multipart([target, sender_pid, body])
 
     def run_control(self) -> None:
@@ -132,10 +147,12 @@ class Broker:
 
         # Sends crash/kill notifications to affected processes via the data broker.
         notifier: zmq.Socket[bytes] = self._ctx.socket(zmq.DEALER)
+        notifier.setsockopt(zmq.LINGER, 0)
         notifier.identity = b"vm-notifier"
         notifier.connect(self._broker_addr)
 
         router: zmq.Socket[bytes] = self._ctx.socket(zmq.ROUTER)
+        router.setsockopt(zmq.LINGER, 0)
         router.bind(self._ctrl_addr)
 
         handlers = make_ctrl_handlers(
@@ -148,7 +165,12 @@ class Broker:
         )
 
         while True:
-            frames = router.recv_multipart()
+            try:
+                frames = router.recv_multipart()
+            except zmq.ZMQError as err:
+                if err.errno == zmq.ETERM:
+                    return
+                raise
             requester = frames[0]
             command = frames[1]
 
