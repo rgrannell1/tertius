@@ -5,6 +5,9 @@ from typing import Any
 from tertius.effects import ELink, EReceive, EReceiveTimeout, ESelf, ESend, ESleep, ESpawn
 from tertius.types import Envelope, Pid
 
+# Number of self-messages the flood worker sends per spawn
+_FLOOD_COUNT = 300
+
 
 def idle_worker() -> Generator[Any, Any, None]:
     """Loops indefinitely, discarding all received messages."""
@@ -71,6 +74,17 @@ def slow_exit_worker() -> Generator[Any, Any, None]:
     yield ESleep(ms=30)
 
 
+def message_flood_worker() -> Generator[Any, Any, None]:
+    """Sends _FLOOD_COUNT messages to self, keeping the data ROUTER busy.
+
+    Maximises the probability that ctx.term() races with a send_multipart call
+    in _run_data_loop during broker shutdown.
+    """
+    me: Pid = yield ESelf()
+    for _ in range(_FLOOD_COUNT):
+        yield ESend(pid=me, body="flood")
+
+
 WORKER_SCOPE: dict[str, Callable[..., Any]] = {
     "idle_worker": idle_worker,
     "echo_worker": echo_worker,
@@ -80,6 +94,7 @@ WORKER_SCOPE: dict[str, Callable[..., Any]] = {
     "spawner_worker": spawner_worker,
     "slow_crash_worker": slow_crash_worker,
     "slow_exit_worker": slow_exit_worker,
+    "message_flood_worker": message_flood_worker,
 }
 
 # Workers that take no args — freely spawnable by SpawnAction.
@@ -91,4 +106,5 @@ WORKER_FN_NAMES: list[str] = [
     "spawner_worker",
     "slow_crash_worker",
     "slow_exit_worker",
+    "message_flood_worker",
 ]

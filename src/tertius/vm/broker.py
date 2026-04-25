@@ -62,7 +62,12 @@ def _run_data_loop(router: "zmq.Socket[bytes]") -> None:
             if _is_shutdown_error(err):
                 return
             raise
-        router.send_multipart([target, sender_pid, body])
+        try:
+            router.send_multipart([target, sender_pid, body])
+        except zmq.ZMQError as err:
+            if _is_shutdown_error(err):
+                return
+            raise
 
 
 def _dispatch_command(

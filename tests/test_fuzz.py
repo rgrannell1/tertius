@@ -1,4 +1,6 @@
 """Fuzz tests for the Tertius VM — asserts no combination of process operations crashes the VM."""
+import threading
+import zmq
 from collections import defaultdict
 from functools import partial
 from typing import Any
@@ -95,6 +97,39 @@ def _assert_telemetry_invariants(events: list[Any]) -> None:
     _assert_no_double_terminal(by_tag)
     _assert_no_double_crash(by_tag)
     _assert_spawns_resolved(by_tag)
+
+
+@pytest.mark.parametrize("seed", range(NUM_SEEDS))
+def test_fuzz_no_thread_exception_under_random_message_traffic(collect, seed):
+    """No ZMQ error must escape to the thread machinery under any random workload.
+
+    message_flood_worker saturates the data router so the send_multipart race
+    fires whenever ctx.term() overlaps with an in-flight forward.
+    Before the fix this catches ContextTerminated escaping from _run_data_loop.
+    """
+    thread_exceptions: list[BaseException] = []
+    original_hook = threading.excepthook
+
+    def _capture(args: threading.ExceptHookArgs) -> None:
+        thread_exceptions.append(args.exc_value)
+
+    threading.excepthook = _capture
+    try:
+        try:
+            collect(partial(fuzz_root, seed, SEQUENCE_LENGTH), scope=WORKER_SCOPE)
+        except LinkedCrash:
+            pass
+    finally:
+        threading.excepthook = original_hook
+
+    zmq_errors = [exc for exc in thread_exceptions if isinstance(exc, zmq.ZMQError)]
+    if zmq_errors:
+        actions = generate_action_sequence(seed, SEQUENCE_LENGTH)
+        pytest.fail(
+            f"Unhandled ZMQ errors in broker threads: {zmq_errors}\n"
+            f"{_format_action_sequence(seed, actions)}",
+            pytrace=False,
+        )
 
 
 @pytest.mark.parametrize("seed", range(NUM_SEEDS))
