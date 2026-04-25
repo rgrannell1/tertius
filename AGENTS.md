@@ -1,23 +1,7 @@
+@/home/rg/Agents/AGENTS.md
+@/home/rg/Agents/agents.python.md
 
-- Tertius is an erlang-like VM + processes system build on algebraic effects
-- /home/rg/Code/orbis is the algebraic effects system
-- It is a UV project
-- It uses `/home/rg/Code/rs` as a build system
-- Run tests with `rs test`
-- Lint and type-check with `rs lint`
-- No single-letter variable names
-- It is critical to preserve as much type-information as possible, as that's a primary benefit of algebraic effects
-- No mid file imports
-- Do not remove my docstrings
-- Do not delete comments, it's annoying. I use them to make it obvious what a block of code is intended to do
-- use the constants file for constants. document with a plain english line comment what the thing represents. group constants in a block of related terms.
-- Avoid deeply nested lines
-- Do not write large functions. Split into subfunctions
-- Do not write inner functions; use partial application instead
-- Avoid using optional, or `X | None = None` unless there's a direct need for it
-- Add short descriptions to each file of the intent of the contents
-- Factor out shared test setup code to a conftest.py
-- Factor out types to <module_name>_types.py
-- Avoid using python lambdas, except in .sort(). never use multiple lambdas in one call
-- Factor out complex type definitions into named type definitions.
-- Do not swallow ZMQError's
+- Tertius is an erlang-like VM + processes system built on algebraic effects
+- `/home/rg/Code/orbis` is the algebraic effects system
+- It is critical to preserve as much type information as possible, as that is a primary benefit of algebraic effects
+- Do not swallow `ZMQError`s
