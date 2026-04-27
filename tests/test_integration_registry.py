@@ -1,13 +1,11 @@
 """Integration tests for ERegister / EWhereis — name-based process lookup."""
 
-from tertius.genserver import mcast
 from collections.abc import Generator
 from typing import Any
 
 from tertius.effects import EReceive, ERegister, ESpawn, EWhereis
+from tertius.genserver import mcast
 from tertius.types import CastMsg, Envelope, Pid
-from tertius.vm import run
-
 
 # ---------------------------------------------------------------------------
 # Fixtures (module-level so they are resolvable via scope)

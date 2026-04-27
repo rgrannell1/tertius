@@ -1,7 +1,7 @@
 # VM observability events — constructors for bookman Events emitted at key lifecycle points.
 import time
 
-from bookman.events import point, span, Event, Message
+from bookman.events import Event, Message, point, span
 
 from tertius.types import Pid
 from tertius.vm.broker_utils import pid_hex

@@ -3,11 +3,10 @@
 from collections.abc import Generator
 from typing import Any
 
+from tertius.effects import EEmit, ESleep, ESpawn
 from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
-from tertius.effects import EEmit, ESpawn, ESleep
 from tertius.types import Pid
 from tertius.vm import run
-
 
 # ---------------------------------------------------------------------------
 # Counter process

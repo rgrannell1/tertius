@@ -23,9 +23,8 @@ import pickle
 from typing import Any
 
 from tertius.constants import Cmd
-from tertius.exceptions import LinkedCrash, ProcessCrash
+from tertius.exceptions import LinkedCrashError, ProcessCrashError
 from tertius.types import Codec, Envelope, Pid
-
 
 # ---------------------------------------------------------------------------
 # Frame accessors
@@ -61,13 +60,13 @@ envelope: Codec[Envelope] = Codec(encode=_encode_envelope, decode=_decode_envelo
 
 
 def encode_crash_notification(
-    target: Pid, sender: Pid, crash: ProcessCrash
+    target: Pid, sender: Pid, crash: ProcessCrashError
 ) -> list[bytes]:
     return [bytes(target), bytes(sender), pickle.dumps(crash)]
 
 
 def encode_linked_crash_notification(
-    target: Pid, sender: Pid, crash: LinkedCrash
+    target: Pid, sender: Pid, crash: LinkedCrashError
 ) -> list[bytes]:
     return [bytes(target), bytes(sender), pickle.dumps(crash)]
 

@@ -2,7 +2,7 @@
 import zmq
 
 from tertius.constants import Cmd
-from tertius.exceptions import LinkedCrash, ProcessCrash
+from tertius.exceptions import LinkedCrashError, ProcessCrashError
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
@@ -65,7 +65,7 @@ def handle_link(
     if target_pid in state.dead:
         # Target already gone — deliver the crash signal retroactively so the
         # caller behaves consistently whether the link races with a crash or not.
-        kill_msg = LinkedCrash(pid=target_pid, reason=state.dead[target_pid])
+        kill_msg = LinkedCrashError(pid=target_pid, reason=state.dead[target_pid])
         notifier.send_multipart(
             encode_linked_crash_notification(requester_pid, target_pid, kill_msg)
         )
@@ -92,7 +92,7 @@ def handle_monitor(
         # Same retroactive delivery as handle_link — the monitor guarantee is
         # that you always receive exactly one notification, even if the target
         # died before you asked.
-        crash_msg = ProcessCrash(pid=target_pid, reason=state.dead[target_pid])
+        crash_msg = ProcessCrashError(pid=target_pid, reason=state.dead[target_pid])
         notifier.send_multipart(
             encode_crash_notification(requester_pid, target_pid, crash_msg)
         )

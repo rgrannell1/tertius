@@ -1,10 +1,11 @@
 """Action generators, executors, and root process for the Tertius VM fuzzer."""
+import contextlib
 import random
 from collections.abc import Generator
 from typing import Any
 
 from tertius.effects import EEmit, EKill, ELink, EMonitor, EReceiveTimeout, ERegister, ESelf, ESend, ESleep, ESpawn, EWhereis
-from tertius.exceptions import DeadProcess
+from tertius.exceptions import DeadProcessError
 from tertius.types import Envelope, Pid
 
 from .fuzz_types import (
@@ -24,7 +25,6 @@ from .fuzz_types import (
     WhereisAction,
 )
 from .fuzz_workers import WORKER_FN_NAMES
-
 
 # Maximum total process spawns per fuzz run
 MAX_SPAWNS = 10
@@ -95,12 +95,10 @@ def execute_spawn(state: FuzzRunState, fn_name: str) -> Generator[Any, Any, None
 
 
 def execute_kill(state: FuzzRunState, target_idx: int) -> Generator[Any, Any, None]:
-    """Kill a process; swallows DeadProcess if it already exited."""
+    """Kill a process; swallows DeadProcessError if it already exited."""
     target = state.pid_pool[target_idx]
-    try:
+    with contextlib.suppress(DeadProcessError):
         yield EKill(pid=target)
-    except DeadProcess:
-        pass
 
 
 def execute_send(state: FuzzRunState, target_idx: int, body: Any) -> Generator[Any, Any, None]:
@@ -110,13 +108,13 @@ def execute_send(state: FuzzRunState, target_idx: int, body: Any) -> Generator[A
 
 
 def execute_monitor(state: FuzzRunState, target_idx: int) -> Generator[Any, Any, None]:
-    """Set a one-shot monitor; retroactive ProcessCrash delivered as a message if already dead."""
+    """Set a one-shot monitor; retroactive ProcessCrashError delivered as a message if already dead."""
     target = state.pid_pool[target_idx]
     yield EMonitor(pid=target)
 
 
 def execute_link(state: FuzzRunState, target_idx: int) -> Generator[Any, Any, None]:
-    """Bidirectionally link to a process; retroactive LinkedCrash queued as a message if already dead."""
+    """Bidirectionally link to a process; retroactive LinkedCrashError queued as a message if already dead."""
     target = state.pid_pool[target_idx]
     yield ELink(pid=target)
 
@@ -209,7 +207,7 @@ def execute_action(state: FuzzRunState, action: FuzzAction) -> Generator[Any, An
 def drain_notifications(timeout_ms: int) -> Generator[Any, Any, None]:
     """Drain all pending messages from the root mailbox until a timeout elapses.
 
-    Retroactive LinkedCrash or ProcessCrash notifications from monitors and
+    Retroactive LinkedCrashError or ProcessCrashError notifications from monitors and
     links accumulate here and are consumed so the root process exits cleanly.
     """
     while True:
@@ -225,10 +223,8 @@ def cleanup_processes(state: FuzzRunState) -> Generator[Any, Any, None]:
     destroyed, avoiding a ZMQ race in the broker's shutdown path.
     """
     for pid in state.pid_pool:
-        try:
+        with contextlib.suppress(DeadProcessError):
             yield EKill(pid=pid)
-        except DeadProcess:
-            pass
 
 
 def _advance_simulated_state(state: FuzzRunState, action: FuzzAction) -> None:

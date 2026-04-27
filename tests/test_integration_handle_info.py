@@ -6,8 +6,6 @@ from typing import Any
 from tertius.effects import ESend, ESpawn
 from tertius.genserver import gen_server, mcall
 from tertius.types import Pid
-from tertius.vm import run
-
 
 # ---------------------------------------------------------------------------
 # Accumulator process — collects raw messages via handle_info
@@ -28,7 +26,7 @@ def _accumulator_init(*_: Any) -> Generator[Any, Any, list]:
 
 
 def _accumulator_info(state: list, body: Any) -> Generator[Any, Any, list]:
-    return state + [body]
+    return [*state, body]
     yield
 
 

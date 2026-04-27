@@ -8,7 +8,6 @@ from typing import Any
 import zmq
 
 from tertius.constants import Cmd
-from tertius.vm.broker_utils import ctrl_send
 from tertius.effects import (
     EEmit,
     EKill,
@@ -23,8 +22,9 @@ from tertius.effects import (
     ESpawn,
     EWhereis,
 )
-from tertius.exceptions import LinkedCrash
+from tertius.exceptions import LinkedCrashError
 from tertius.types import Envelope, Pid
+from tertius.vm.broker_utils import ctrl_send
 from tertius.vm.messages import (
     emit,
     envelope,
@@ -80,7 +80,7 @@ def _handle_receive(dealer: "zmq.Socket[bytes]", _effect: EReceive) -> Generator
 
     env = envelope.decode(dealer.recv_multipart())
 
-    if isinstance(env.body, LinkedCrash):
+    if isinstance(env.body, LinkedCrashError):
         raise env.body
     return env
     yield
@@ -115,7 +115,7 @@ def _handle_receive_timeout(
         return None
 
     env = envelope.decode(dealer.recv_multipart())
-    if isinstance(env.body, LinkedCrash):
+    if isinstance(env.body, LinkedCrashError):
         raise env.body
 
     return env

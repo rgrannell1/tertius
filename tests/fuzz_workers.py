@@ -69,7 +69,7 @@ def slow_exit_worker() -> Generator[Any, Any, None]:
     """Sleeps briefly then exits normally.
 
     Creates a race window between EKill arriving at the broker and the
-    process's own NormalExit notification — both target the same PID.
+    process's own NormalExitError notification — both target the same PID.
     """
     yield ESleep(ms=30)
 

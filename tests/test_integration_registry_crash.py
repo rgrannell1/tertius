@@ -5,8 +5,6 @@ from typing import Any
 
 from tertius.effects import EMonitor, EReceive, ERegister, ESpawn, EWhereis
 from tertius.types import Pid
-from tertius.vm import run
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

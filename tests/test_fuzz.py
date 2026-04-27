@@ -1,19 +1,19 @@
 """Fuzz tests for the Tertius VM — asserts no combination of process operations crashes the VM."""
+import contextlib
 import threading
-import zmq
 from collections import defaultdict
 from functools import partial
 from typing import Any
 
 import pytest
-
+import zmq
 from bookman.events import Event
-from tertius.exceptions import LinkedCrash
+
+from tertius.exceptions import LinkedCrashError
 
 from .fuzz_executor import fuzz_root, generate_action_sequence
 from .fuzz_types import FuzzAction
 from .fuzz_workers import WORKER_SCOPE
-
 
 # Steps per fuzz run
 SEQUENCE_LENGTH = 50
@@ -69,10 +69,8 @@ def _format_event_line(event: Any) -> str:
     tag = event.dim("tag")
     pid_id = event.dim("id")
     parts = [f"{tag:<28} id={pid_id}"]
-    try:
+    with contextlib.suppress(Exception):
         parts.append(f"  name={event.dim('name')!r}")
-    except Exception:
-        pass
     value = getattr(event, "value", None)
     if value is not None:
         parts.append(f"  value={value}")
@@ -115,10 +113,8 @@ def test_fuzz_no_thread_exception_under_random_message_traffic(collect, seed):
 
     threading.excepthook = _capture
     try:
-        try:
+        with contextlib.suppress(LinkedCrashError):
             collect(partial(fuzz_root, seed, SEQUENCE_LENGTH), scope=WORKER_SCOPE)
-        except LinkedCrash:
-            pass
     finally:
         threading.excepthook = original_hook
 
@@ -136,7 +132,7 @@ def test_fuzz_no_thread_exception_under_random_message_traffic(collect, seed):
 def test_fuzz_vm_survives_random_action_sequence(collect, seed):
     """VM must not crash under any random sequence of process operations.
 
-    LinkedCrash propagating to the root is expected Erlang-style behaviour (the
+    LinkedCrashError propagating to the root is expected Erlang-style behaviour (the
     root linked to a process that crashed) and is not a failure.
     """
     try:
@@ -144,7 +140,7 @@ def test_fuzz_vm_survives_random_action_sequence(collect, seed):
             partial(fuzz_root, seed, SEQUENCE_LENGTH),
             scope=WORKER_SCOPE,
         )
-    except LinkedCrash:
+    except LinkedCrashError:
         return
 
     try:

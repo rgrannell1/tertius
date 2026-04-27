@@ -97,7 +97,7 @@ class EEmit[BodyT](Event):
 
 @dataclass
 class EKill(Event):
-    """Terminate a process — delivers ProcessCrash to its monitors."""
+    """Terminate a process — delivers ProcessCrashError to its monitors."""
 
     tag: ClassVar[LiteralString] = "kill"
     pid: Pid

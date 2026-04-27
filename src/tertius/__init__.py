@@ -1,5 +1,4 @@
 # Public API for the Tertius erlang-style process runtime.
-from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
 from tertius.effects import (
     EEmit,
     EKill,
@@ -15,21 +14,22 @@ from tertius.effects import (
     EWhereis,
 )
 from tertius.exceptions import (
-    DeadProcess,
-    LinkedCrash,
-    NormalExit,
-    ProcessCrash,
+    DeadProcessError,
+    LinkedCrashError,
+    NormalExitError,
+    ProcessCrashError,
     TertiusError,
 )
+from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
 from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
 from tertius.vm import Scope, run
 
 __all__ = [
     "CallMsg",
     "CastMsg",
-    "DeadProcess",
-    "LinkedCrash",
-    "NormalExit",
+    "DeadProcessError",
+    "LinkedCrashError",
+    "NormalExitError",
     "Envelope",
     "EEmit",
     "EKill",
@@ -45,7 +45,7 @@ __all__ = [
     "EWhereis",
     "gen_server",
     "Pid",
-    "ProcessCrash",
+    "ProcessCrashError",
     "ReplyMsg",
     "Scope",
     "TertiusError",

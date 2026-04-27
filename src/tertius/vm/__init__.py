@@ -49,7 +49,7 @@ def _root_thread(
     try:
         result = complete(fn(*args), **make_handlers(root_pid, dealer, ctrl))
         root_result.append(result)
-    except Exception as err:
+    except Exception as err:  # noqa: BLE001
         root_exc.append(err)
     finally:
         dealer.close()

@@ -1,5 +1,6 @@
 """Tests for gen_server — stateful process loops built from handler functions."""
 
+import contextlib
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from functools import partial
@@ -10,10 +11,9 @@ from hypothesis import given
 from hypothesis import strategies as st
 from orbis import Effect, UnhandledEffect, complete
 
-from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
 from tertius.effects import EReceive, EReceiveTimeout, ESend
+from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
 from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
-
 
 # ---------------------------------------------------------------------------
 # A minimal custom effect used in effectful-handler tests
@@ -92,15 +92,13 @@ def drive(
     inbox = [Envelope(sender=SENDER, body=msg) for msg in messages]
     sent: list[Any] = []
 
-    try:
+    with contextlib.suppress(IndexError):  # inbox exhausted — expected termination
         complete(
             server(initial),
             receive=partial(_pop_inbox, inbox),
             send=partial(_record_send, sent),
             **extra_handlers,
         )
-    except IndexError:
-        pass  # inbox exhausted — expected termination
 
     return sent
 

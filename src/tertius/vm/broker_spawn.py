@@ -7,14 +7,13 @@ from typing import Any
 
 import zmq
 
-from tertius.constants import Cmd, SPAWN_READY_TIMEOUT_MS
+from tertius.constants import SPAWN_READY_TIMEOUT_MS, Cmd
 from tertius.types import Pid, Scope
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
 from tertius.vm.events import spawn_ready, spawn_started, spawn_timeout
 from tertius.vm.messages import pid_reply, spawn
 from tertius.vm.process import process_entry
-
 
 _SPAWN_CTX = multiprocessing.get_context("spawn")
 
@@ -69,7 +68,7 @@ def _await_ready(
                     raise RuntimeError(
                         f"ESpawn: process {fn_name!r} died before sending READY "
                         f"(exit code {proc.exitcode})"
-                    )
+                    ) from None
                 continue
 
             child_requester, child_command = child_frames[0], child_frames[1]

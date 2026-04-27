@@ -6,8 +6,8 @@ from typing import Any, ClassVar, LiteralString
 
 from orbis import Effect, complete
 
-from tertius.genserver import mcast
 from tertius.effects import EReceive
+from tertius.genserver import mcast
 from tertius.types import Envelope, Pid
 
 

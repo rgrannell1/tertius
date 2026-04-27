@@ -11,7 +11,6 @@ import zmq
 from tertius.constants import Cmd
 from tertius.types import Pid, Scope
 from tertius.vm.broker_crash import handle_crash, handle_kill
-from tertius.vm.broker_utils import reply
 from tertius.vm.broker_handlers import (
     handle_emit,
     handle_link,
@@ -21,6 +20,7 @@ from tertius.vm.broker_handlers import (
 )
 from tertius.vm.broker_spawn import handle_spawn
 from tertius.vm.broker_state import BrokerState
+from tertius.vm.broker_utils import reply
 
 
 def _is_shutdown_error(err: zmq.ZMQError) -> bool:
@@ -86,7 +86,7 @@ def _dispatch_command(
         if _is_shutdown_error(err):
             return False
         raise
-    except Exception as err:
+    except Exception as err:  # noqa: BLE001
         # Send the exception back to the caller rather than crashing
         # the broker — one bad request shouldn't take down the VM.
         try:

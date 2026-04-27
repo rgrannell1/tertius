@@ -1,14 +1,14 @@
 """Integration tests for VM and broker lifecycle — clean shutdown after completion."""
 import threading
-import zmq
 from collections.abc import Generator
 from typing import Any
+
+import zmq
 
 from tertius.effects import EEmit, ESelf, ESend, ESleep, ESpawn
 from tertius.types import Pid
 from tertius.vm import VM, run
 from tertius.vm.broker import _run_data_loop
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

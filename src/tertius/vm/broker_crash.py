@@ -4,7 +4,7 @@ import pickle
 import zmq
 
 from tertius.constants import Cmd
-from tertius.exceptions import DeadProcess, LinkedCrash, NormalExit, ProcessCrash
+from tertius.exceptions import DeadProcessError, LinkedCrashError, NormalExitError, ProcessCrashError
 from tertius.types import Pid
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
@@ -31,7 +31,7 @@ def _notify_monitors(
 ) -> list[Pid]:
     # Monitors receive a one-shot notification and are then removed — they don't
     # re-arm automatically, matching Erlang's monitor semantics.
-    crash_msg = ProcessCrash(pid=pid, reason=reason)
+    crash_msg = ProcessCrashError(pid=pid, reason=reason)
     watchers = list(state.monitors.pop(pid, []))
 
     for watcher in watchers:
@@ -46,14 +46,14 @@ def _notify_links(
     pid: Pid,
     reason: Exception,
 ) -> list[Pid]:
-    if isinstance(reason, NormalExit):
+    if isinstance(reason, NormalExitError):
         state.links.pop(pid, None)
         return []
 
-    # Links are bidirectional: when one end dies the other gets a LinkedCrash
+    # Links are bidirectional: when one end dies the other gets a LinkedCrashError
     # signal and the back-reference is cleaned up so the surviving process isn't
     # notified again if it subsequently dies itself.
-    kill_msg = LinkedCrash(pid=pid, reason=reason)
+    kill_msg = LinkedCrashError(pid=pid, reason=reason)
     peers = list(state.links.pop(pid, set()))
 
     for peer in peers:
@@ -117,7 +117,7 @@ def handle_kill(
     target_pid = kill.decode(frames)
 
     if target_pid in state.dead:
-        reply(router, requester, Cmd.ERROR, pickle.dumps(DeadProcess(target_pid)))
+        reply(router, requester, Cmd.ERROR, pickle.dumps(DeadProcessError(target_pid)))
         return
 
     # Ack before terminating so the caller isn't blocked waiting on a process
@@ -148,7 +148,7 @@ def handle_crash(
     crashed_pid = Pid.from_bytes(requester)
     reason = crash.decode(frames)
 
-    if isinstance(reason, NormalExit):
+    if isinstance(reason, NormalExitError):
         state.emit_queue.put(process_exited(crashed_pid))
     else:
         state.emit_queue.put(process_crashed(crashed_pid, reason))

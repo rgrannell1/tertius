@@ -3,11 +3,9 @@
 from collections.abc import Generator
 from typing import Any
 
-from tertius.genserver import gen_server, mcall, mcast
 from tertius.effects import EReceive, ESelf, ESpawn
+from tertius.genserver import gen_server, mcall, mcast
 from tertius.types import CastMsg, Envelope, Pid
-from tertius.vm import run
-
 
 # ---------------------------------------------------------------------------
 # Echo process — replies with whatever body it receives

@@ -41,7 +41,7 @@ simple_args = st.tuples(st.integers(), st.text(), st.booleans())
 def router_wrap(encoded: list[bytes], identity: bytes = b"identity") -> list[bytes]:
     """Simulate what a ROUTER socket does: prepend sender identity to received frames."""
 
-    return [identity] + encoded
+    return [identity, *encoded]
 
 
 # ---------------------------------------------------------------------------

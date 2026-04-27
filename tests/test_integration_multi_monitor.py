@@ -3,12 +3,10 @@
 from collections.abc import Generator
 from typing import Any
 
-from tertius.genserver import mcast
 from tertius.effects import EMonitor, EReceive, ESelf, ESend, ESpawn
-from tertius.exceptions import ProcessCrash
+from tertius.exceptions import ProcessCrashError
+from tertius.genserver import mcast
 from tertius.types import CastMsg, Envelope, Pid
-from tertius.vm import run
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -76,11 +74,11 @@ _SCOPE = {"crash_on_command": crash_on_command, "watch_and_forward": watch_and_f
 
 
 def test_all_monitors_receive_crash_notification(collect):
-    """Proves that every process monitoring a crasher receives a ProcessCrash."""
+    """Proves that every process monitoring a crasher receives a ProcessCrashError."""
 
     results, _ = collect(_root_two_watchers, scope=_SCOPE)
     assert len(results) == 2
-    assert all(isinstance(res, ProcessCrash) for res in results)
+    assert all(isinstance(res, ProcessCrashError) for res in results)
 
 
 def test_all_crash_notifications_identify_same_pid(collect):

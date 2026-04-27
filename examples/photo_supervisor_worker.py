@@ -11,7 +11,7 @@ from typing import Any, ClassVar, Generator, LiteralString
 
 from orbis import Effect, Event, handle
 
-from tertius import EReceive, ESpawn, ESelf, mcast, run
+from tertius import EReceive, ESelf, ESpawn, mcast, run
 from tertius.types import CastMsg, Envelope, Pid
 
 # some example data
@@ -88,14 +88,14 @@ def worker(supervisor_pid_bytes: bytes) -> Generator[Any, Any, None]:
         envelope: Envelope = yield EReceive()
 
         match envelope.body:
-            case CastMsg(body=(MSG_PROCESS, path)):
+            case CastMsg(body=(MSG_PROCESS, path)):  # noqa: F841
                 yield from handle(
                     process_photo(path),
                     encode=handle_encode,
                     write_db=handle_write_db,
                 )
                 yield from mcast(supervisor, (MSG_DONE, path))
-            case CastMsg(body=MSG_STOP):
+            case CastMsg(body=MSG_STOP):  # noqa: F841
                 return
 
 
@@ -122,7 +122,7 @@ def supervisor() -> Generator[Any, Any, None]:
         envelope: Envelope = yield EReceive()
 
         match envelope.body:
-            case CastMsg(body=(MSG_DONE, path)):
+            case CastMsg(body=(MSG_DONE, path)):  # noqa: F841
                 print(f"  ✓ {path}")
 
     for pid in pool:

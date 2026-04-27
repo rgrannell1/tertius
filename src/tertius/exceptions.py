@@ -8,7 +8,7 @@ class TertiusError(Exception):
     pass
 
 
-class ProcessCrash(TertiusError):
+class ProcessCrashError(TertiusError):
     """A process that has crashed"""
 
     def __init__(self, pid: Pid, reason: Exception) -> None:
@@ -20,7 +20,7 @@ class ProcessCrash(TertiusError):
         return (self.__class__, (self.pid, self.reason))
 
 
-class LinkedCrash(TertiusError):
+class LinkedCrashError(TertiusError):
     """Raised in a process when a linked process crashes."""
 
     def __init__(self, pid: Pid, reason: Exception) -> None:
@@ -32,7 +32,7 @@ class LinkedCrash(TertiusError):
         return (self.__class__, (self.pid, self.reason))
 
 
-class NormalExit(TertiusError):
+class NormalExitError(TertiusError):
     """Reason delivered to monitors when a process exits cleanly.
 
     Links are not notified — matching Erlang's :normal exit semantics.
@@ -46,7 +46,7 @@ class NormalExit(TertiusError):
         return (self.__class__, (self.pid,))
 
 
-class DeadProcess(TertiusError):
+class DeadProcessError(TertiusError):
     """A process that has exited"""
 
     def __init__(self, pid: Pid) -> None:

@@ -6,10 +6,8 @@ from typing import Any
 import pytest
 
 from tertius.effects import EKill, ELink, EMonitor, EReceive, ESpawn
-from tertius.exceptions import DeadProcess, ProcessCrash
+from tertius.exceptions import DeadProcessError, ProcessCrashError
 from tertius.types import Envelope, Pid
-from tertius.vm import run
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -42,10 +40,10 @@ def _root_kill_notifies_monitor() -> Generator[Any, Any, Any]:
 
 
 def test_kill_delivers_process_crash_to_monitor(collect):
-    """Proves that EKill causes a ProcessCrash notification to arrive at the monitor."""
+    """Proves that EKill causes a ProcessCrashError notification to arrive at the monitor."""
 
     result, _ = collect(_root_kill_notifies_monitor, scope=_SCOPE)
-    assert isinstance(result, ProcessCrash)
+    assert isinstance(result, ProcessCrashError)
     assert isinstance(result.reason, RuntimeError)
     assert str(result.reason) == "killed"
 
@@ -59,9 +57,9 @@ def _root_kill_already_dead_raises() -> Generator[Any, Any, None]:
 
 
 def test_kill_already_dead_process_raises(collect):
-    """Proves that killing an already-dead process raises DeadProcess."""
+    """Proves that killing an already-dead process raises DeadProcessError."""
 
-    with pytest.raises(DeadProcess):
+    with pytest.raises(DeadProcessError):
         collect(_root_kill_already_dead_raises, scope=_SCOPE)
 
 
@@ -78,4 +76,4 @@ def test_kill_propagates_crash_to_linked_peer(collect):
     """Proves that killing a process delivers a crash to processes linked to it."""
 
     result, _ = collect(_root_kill_propagates_to_linked_peer, scope=_SCOPE)
-    assert isinstance(result, ProcessCrash)
+    assert isinstance(result, ProcessCrashError)

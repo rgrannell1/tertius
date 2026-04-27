@@ -22,13 +22,17 @@ dev = [
     "pyright>=1.1.408",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
+    "vulture",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tertius"]
 
+[tool.ruff]
+line-length = 130
+
 [tool.ruff.lint]
-select = ["E402"]
+select = ["E", "F", "I", "N", "UP", "B", "C4", "BLE", "SIM", "RUF"]
 
 [tool.mypy]
 strict = true

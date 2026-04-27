@@ -8,13 +8,11 @@ from tertius.effects import (
     EMonitor,
     EReceive,
     EReceiveTimeout,
-    ESpawn,
     ESelf,
+    ESpawn,
 )
-from tertius.exceptions import ProcessCrash
+from tertius.exceptions import ProcessCrashError
 from tertius.types import Envelope, Pid
-from tertius.vm import run
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -51,7 +49,7 @@ _SCOPE = {
 
 def _root_link_propagates_crash() -> Generator[Any, Any, Any]:
     """Spawn a crasher and a worker linked to it; monitor the worker to observe it dying."""
-    me: Pid = yield ESelf()
+    yield ESelf()
     crasher: Pid = yield ESpawn(fn_name="crash_immediately")
     worker: Pid = yield ESpawn(fn_name="linked_worker", args=(bytes(crasher),))
     yield EMonitor(pid=worker)
@@ -62,7 +60,7 @@ def _root_link_propagates_crash() -> Generator[Any, Any, Any]:
 def test_linked_process_dies_when_peer_crashes(collect):
     """Proves that a process linked to a crasher also dies."""
     result, _ = collect(_root_link_propagates_crash, scope=_SCOPE)
-    assert isinstance(result, ProcessCrash)
+    assert isinstance(result, ProcessCrashError)
 
 
 def _root_link_kills_receive_timeout() -> Generator[Any, Any, Any]:
@@ -75,6 +73,6 @@ def _root_link_kills_receive_timeout() -> Generator[Any, Any, Any]:
 
 
 def test_linked_process_dies_when_blocked_on_receive_timeout(collect):
-    """Proves that EReceiveTimeout raises LinkedCrash when a linked peer crashes."""
+    """Proves that EReceiveTimeout raises LinkedCrashError when a linked peer crashes."""
     result, _ = collect(_root_link_kills_receive_timeout, scope=_SCOPE)
-    assert isinstance(result, ProcessCrash)
+    assert isinstance(result, ProcessCrashError)
