@@ -139,7 +139,7 @@ def test_single_increment(increment):
 def test_increments_accumulate(increments):
     """Proves that State after N increments equals the sum of all increments."""
 
-    messages = [CastMsg(body=("inc", n)) for n in increments] + [
+    messages = [CastMsg(body=("inc", increment)) for increment in increments] + [
         CallMsg(ref=0, body="get")
     ]
     sent = drive(counter, 0, messages)

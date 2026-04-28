@@ -130,5 +130,5 @@ def supervisor() -> Generator[Any, Any, None]:
 
 
 if __name__ == "__main__":
-    for x in run(supervisor, scope={"worker": worker}):
-        print(x)
+    for event in run(supervisor, scope={"worker": worker}):
+        print(event)
