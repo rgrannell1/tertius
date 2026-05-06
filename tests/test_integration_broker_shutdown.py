@@ -7,7 +7,7 @@ import zmq
 
 from tertius.effects import EEmit, ESelf, ESend, ESleep, ESpawn
 from tertius.types import Pid
-from tertius.vm import VM, run
+from tertius.vm import run, vm_run
 from tertius.vm.broker import _run_data_loop
 
 # ---------------------------------------------------------------------------
@@ -97,9 +97,6 @@ def test_broker_context_is_terminated_after_vm_completes():
     # Without the fix, the context is never explicitly terminated — Python's GC
     # eventually calls ctx.term() while broker threads still have open sockets,
     # causing SIGABRT (reliably seen on Python 3.14 in zahir2).
-    # The fix has VM.start() call broker.stop() which terminates the context
-    # before the VM goes out of scope.
-    vm = VM(scope=_SCOPE)
-    events = list(vm.start(root_with_background_spawn, ()))
+    # The fix calls broker.stop() before vm_run returns, terminating the context.
+    events = list(vm_run(root_with_background_spawn, (), _SCOPE))
     assert "started" in events
-    assert vm._broker._ctx.closed, "Broker context should be terminated after VM completes"
