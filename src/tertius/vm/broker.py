@@ -2,22 +2,18 @@
 import pickle
 import queue
 import threading
-from collections.abc import Callable
+from collections.abc import Generator
 from functools import partial
 from typing import Any
 
 import zmq
+from orbis import complete
 
 from tertius.constants import Cmd
 from tertius.types import Pid, Scope
 from tertius.vm.broker_crash import handle_crash, handle_kill
-from tertius.vm.broker_handlers import (
-    handle_emit,
-    handle_link,
-    handle_monitor,
-    handle_register,
-    handle_whereis,
-)
+from tertius.vm.broker_effects import BrokerCmd, decode_frame
+from tertius.vm.broker_handlers import handle_emit, handle_link, handle_monitor, handle_register, handle_whereis
 from tertius.vm.broker_spawn import handle_spawn
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
@@ -70,38 +66,9 @@ def _run_data_loop(router: "zmq.Socket[bytes]") -> None:
             raise
 
 
-def _dispatch_command(
-    router: "zmq.Socket[bytes]",
-    requester: bytes,
-    frames: list[bytes],
-    handlers: dict[bytes, Callable[..., None]],
-) -> bool:
-    """Dispatch one control command. Returns False if the loop should exit."""
-    command = frames[1]
-    if command not in handlers:
-        return True
-    try:
-        handlers[command](router, requester, frames)
-    except zmq.ZMQError as err:
-        if _is_shutdown_error(err):
-            return False
-        raise
-    except Exception as err:  # noqa: BLE001
-        # Send the exception back to the caller rather than crashing
-        # the broker — one bad request shouldn't take down the VM.
-        try:
-            reply(router, requester, Cmd.ERROR, pickle.dumps(err))
-        except zmq.ZMQError as zmq_err:
-            if _is_shutdown_error(zmq_err):
-                return False
-            raise
-    return True
+def broker_control_gen(router: "zmq.Socket[bytes]") -> Generator[BrokerCmd, Any, None]:
+    """Drive the broker control loop as a generator; orbis dispatches each command effect to its handler."""
 
-
-def _run_ctrl_loop(
-    router: "zmq.Socket[bytes]",
-    handlers: dict[bytes, Callable[..., None]],
-) -> None:
     while True:
         try:
             frames = router.recv_multipart()
@@ -109,34 +76,28 @@ def _run_ctrl_loop(
             if _is_shutdown_error(err):
                 return
             raise
+
         requester = frames[0]
-        if not _dispatch_command(router, requester, frames, handlers):
-            return
+        effect = decode_frame(frames)
 
+        if effect is None:
+            continue
 
-def make_ctrl_handlers(
-    alloc_pid: Callable[[], Pid],
-    scope: Scope,
-    broker_addr: str,
-    ctrl_addr: str,
-    state: BrokerState,
-    notifier: "zmq.Socket[bytes]",
-) -> dict[bytes, Callable[..., None]]:
-    """Factory for control command handlers."""
-
-    handlers: dict[bytes, Callable[..., None]] = {}
-    handlers[Cmd.SPAWN] = partial(
-        handle_spawn, alloc_pid, scope, broker_addr, ctrl_addr, state, handlers
-    )
-    handlers[Cmd.REGISTER] = partial(handle_register, state)
-    handlers[Cmd.WHEREIS] = partial(handle_whereis, state)
-    handlers[Cmd.LINK] = partial(handle_link, state, notifier)
-    handlers[Cmd.MONITOR] = partial(handle_monitor, state, notifier)
-    handlers[Cmd.EMIT] = partial(handle_emit, state)
-    handlers[Cmd.KILL] = partial(handle_kill, state, notifier)
-    handlers[Cmd.CRASH] = partial(handle_crash, state, notifier)
-
-    return handlers
+        try:
+            yield effect
+        except zmq.ZMQError as err:
+            if _is_shutdown_error(err):
+                return
+            raise
+        except Exception as err:  # noqa: BLE001
+            # Send the exception back to the caller rather than crashing
+            # the broker — one bad request shouldn't take down the VM.
+            try:
+                reply(router, requester, Cmd.ERROR, pickle.dumps(err))
+            except zmq.ZMQError as zmq_err:
+                if _is_shutdown_error(zmq_err):
+                    return
+                raise
 
 
 class Broker:
@@ -226,17 +187,22 @@ class Broker:
 
         notifier = _make_notifier(self._ctx, self._broker_addr)
         router = _make_router(self._ctx, self._ctrl_addr)
-        handlers = make_ctrl_handlers(
-            self.alloc_pid,
-            self._scope,
-            self._broker_addr,
-            self._ctrl_addr,
-            self._state,
-            notifier,
-        )
+
+        handlers = {
+            "spawn_cmd": partial(
+                handle_spawn, self.alloc_pid, self._scope, self._broker_addr, self._ctrl_addr, self._state, router
+            ),
+            "register_cmd": partial(handle_register, self._state, router),
+            "whereis_cmd": partial(handle_whereis, self._state, router),
+            "link_cmd": partial(handle_link, self._state, notifier, router),
+            "monitor_cmd": partial(handle_monitor, self._state, notifier, router),
+            "emit_cmd": partial(handle_emit, self._state, router),
+            "kill_cmd": partial(handle_kill, self._state, notifier, router),
+            "crash_cmd": partial(handle_crash, self._state, notifier, router),
+        }
 
         try:
-            _run_ctrl_loop(router, handlers)
+            complete(broker_control_gen(router), **handlers)
         finally:
             router.close()
             notifier.close()

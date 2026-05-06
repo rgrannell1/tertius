@@ -9,3 +9,5 @@ The VM emits events for: process spawn starting, spawn ready, spawn timeout, nor
 Events from inside the broker (outside a generator) are placed directly onto the emit queue rather than yielded.
 
 Each event has at minimum `dims["id"]` (the pid in hex) and `dims["tag"]` (the event category, e.g. `spawn:ready` or `process:crash`). Name events also carry `dims["name"]`. Spans are used when both a start and end time are available; points are used for instantaneous observations.
+
+The broker control loop dispatches commands through the orbis effect system rather than direct handler invocation. Each broker command type is represented as an effect; `complete` drives the broker generator and dispatches to handlers by effect tag, the same way processes are driven. The manual `_dispatch_command` function and its error-isolation logic are removed in favour of the generator catching exceptions thrown back by orbis.

@@ -1,11 +1,14 @@
 # Crash and kill handlers — propagate process failures to monitors and linked processes.
 import pickle
+from collections.abc import Generator
+from typing import Any
 
 import zmq
 
 from tertius.constants import Cmd
 from tertius.exceptions import DeadProcessError, LinkedCrashError, NormalExitError, ProcessCrashError
 from tertius.types import Pid
+from tertius.vm.broker_effects import ECrashCmd, EKillCmd
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
 from tertius.vm.events import (
@@ -15,12 +18,7 @@ from tertius.vm.events import (
     process_crashed,
     process_exited,
 )
-from tertius.vm.messages import (
-    crash,
-    encode_crash_notification,
-    encode_linked_crash_notification,
-    kill,
-)
+from tertius.vm.messages import encode_crash_notification, encode_linked_crash_notification
 
 
 def _notify_monitors(
@@ -111,48 +109,46 @@ def handle_kill(
     state: BrokerState,
     notifier: "zmq.Socket[bytes]",
     router: "zmq.Socket[bytes]",
-    requester: bytes,
-    frames: list[bytes],
-) -> None:
-    target_pid = kill.decode(frames)
-
-    if target_pid in state.dead:
-        reply(router, requester, Cmd.ERROR, pickle.dumps(DeadProcessError(target_pid)))
+    effect: EKillCmd,
+) -> Generator[None, Any, None]:
+    if effect.target in state.dead:
+        reply(router, effect.requester, Cmd.ERROR, pickle.dumps(DeadProcessError(effect.target)))
         return
+        yield
 
     # Ack before terminating so the caller isn't blocked waiting on a process
     # that may take a moment to actually die.
-    reply(router, requester, Cmd.OK)
+    reply(router, effect.requester, Cmd.OK)
 
-    proc = state.procs.pop(target_pid, None)
+    proc = state.procs.pop(effect.target, None)
     if proc is not None:
         proc.terminate()
 
     # Treat an external kill as a crash so monitors and links are notified
     # through the same path as a natural process failure.
     killed_reason = RuntimeError("killed")
-    state.emit_queue.put(process_crashed(target_pid, killed_reason))
-    unbound, watchers, peers = _record_crash(state, notifier, target_pid, killed_reason)
-    _emit_crash_events(state, target_pid, unbound, watchers, peers)
+    state.emit_queue.put(process_crashed(effect.target, killed_reason))
+    unbound, watchers, peers = _record_crash(state, notifier, effect.target, killed_reason)
+    _emit_crash_events(state, effect.target, unbound, watchers, peers)
+    return
+    yield
 
 
 def handle_crash(
     state: BrokerState,
     notifier: "zmq.Socket[bytes]",
     router: "zmq.Socket[bytes]",
-    requester: bytes,
-    frames: list[bytes],
-) -> None:
+    effect: ECrashCmd,
+) -> Generator[None, Any, None]:
     # A process reports its own crash rather than the broker detecting it via
     # polling, so the reason is accurate and propagation is synchronous.
-    crashed_pid = Pid.from_bytes(requester)
-    reason = crash.decode(frames)
-
-    if isinstance(reason, NormalExitError):
-        state.emit_queue.put(process_exited(crashed_pid))
+    if isinstance(effect.reason, NormalExitError):
+        state.emit_queue.put(process_exited(effect.pid))
     else:
-        state.emit_queue.put(process_crashed(crashed_pid, reason))
+        state.emit_queue.put(process_crashed(effect.pid, effect.reason))
 
-    unbound, watchers, peers = _record_crash(state, notifier, crashed_pid, reason)
-    _emit_crash_events(state, crashed_pid, unbound, watchers, peers)
-    reply(router, requester, Cmd.OK)
+    unbound, watchers, peers = _record_crash(state, notifier, effect.pid, effect.reason)
+    _emit_crash_events(state, effect.pid, unbound, watchers, peers)
+    reply(router, effect.requester, Cmd.OK)
+    return
+    yield

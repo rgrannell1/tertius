@@ -1,7 +1,7 @@
 # Broker spawn handler — starts new OS processes and waits for them to signal readiness.
 import multiprocessing
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from multiprocessing.process import BaseProcess
 from typing import Any
 
@@ -9,10 +9,11 @@ import zmq
 
 from tertius.constants import SPAWN_READY_TIMEOUT_MS, Cmd
 from tertius.types import Pid, Scope
+from tertius.vm.broker_effects import ESpawnCmd, decode_frame
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
 from tertius.vm.events import spawn_ready, spawn_started, spawn_timeout
-from tertius.vm.messages import pid_reply, spawn
+from tertius.vm.messages import pid_reply
 from tertius.vm.process import process_entry
 
 _SPAWN_CTX = multiprocessing.get_context("spawn")
@@ -40,28 +41,19 @@ def _start_process(
     return proc
 
 
-def _await_ready(
+def await_ready_gen(
     router: "zmq.Socket[bytes]",
     proc: BaseProcess,
     new_pid: Pid,
     fn_name: str,
-    handlers: dict,
-) -> None:
-    """Block until the newly spawned process sends READY on the control socket.
+) -> Generator[Any, Any, None]:
+    """Wait for the spawned process to send READY, dispatching other commands that arrive meanwhile."""
 
-    Other control messages that arrive while waiting are dispatched normally —
-    the system can't simply pause while one process is starting up, since other
-    live processes may be sending control messages concurrently.
-
-    A 1s receive timeout lets us check if the child died without ever sending
-    READY, which would otherwise block forever.
-    """
     router.setsockopt(zmq.RCVTIMEO, SPAWN_READY_TIMEOUT_MS)
-
     try:
         while True:
             try:
-                child_frames = router.recv_multipart()
+                frames = router.recv_multipart()
             except zmq.Again:
                 # Timed out waiting — check if the process is still alive before retrying.
                 if not proc.is_alive():
@@ -71,15 +63,16 @@ def _await_ready(
                     ) from None
                 continue
 
-            child_requester, child_command = child_frames[0], child_frames[1]
+            child_requester, child_command = frames[0], frames[1]
 
             if child_command == Cmd.READY and child_requester == bytes(new_pid):
-                # The child process is ready — reply to the original spawn requester and return.
                 reply(router, child_requester, Cmd.OK)
-                break
+                return
 
-            if child_command in handlers:
-                handlers[child_command](router, child_requester, child_frames)
+            # Dispatch any other commands that arrive while waiting via orbis.
+            effect = decode_frame(frames)
+            if effect is not None:
+                yield effect
     finally:
         router.setsockopt(zmq.RCVTIMEO, -1)
 
@@ -90,12 +83,11 @@ def handle_spawn(
     broker_addr: str,
     ctrl_addr: str,
     state: BrokerState,
-    handlers: dict,
     router: "zmq.Socket[bytes]",
-    requester: bytes,
-    frames: list[bytes],
-) -> None:
-    fn_name, args = spawn.decode(frames)
+    effect: ESpawnCmd,
+) -> Generator[Any, Any, None]:
+    fn_name = effect.fn_name
+    args = effect.args
 
     if fn_name not in scope:
         raise KeyError(f"ESpawn: {fn_name!r} not in scope; available: {sorted(scope)}")
@@ -108,12 +100,14 @@ def handle_spawn(
     try:
         # Block until the process is ready before replying to the caller, so the
         # caller can safely send to the new pid immediately after receiving its pid back.
-        _await_ready(router, proc, new_pid, fn_name, handlers)
+        yield from await_ready_gen(router, proc, new_pid, fn_name)
     except (RuntimeError, zmq.ZMQError):
-        # ZMQError covers broker shutdown racing with _await_ready — still emit
+        # ZMQError covers broker shutdown racing with await_ready_gen — still emit
         # the timeout event so the telemetry stream is always closed.
         state.emit_queue.put(spawn_timeout(new_pid, fn_name, proc.exitcode))
         raise
 
     state.emit_queue.put(spawn_ready(new_pid, spawn_start))
-    reply(router, requester, *pid_reply.encode(new_pid))
+    reply(router, effect.requester, *pid_reply.encode(new_pid))
+    return
+    yield

@@ -9,7 +9,7 @@ dependencies = [
 
 [tool.uv.sources]
 orbis = { path = "../orbis", editable = true }
-bookman = { path = "../sand", editable = true }
+bookman = { path = "../bookman", editable = true }
 
 [build-system]
 requires = ["hatchling"]
