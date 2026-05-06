@@ -1,4 +1,5 @@
-# Central VM broker — routes inter-process messages and handles all control commands.
+"""Central VM broker — routes inter-process messages and handles all control commands."""
+
 import pickle
 import queue
 import threading
@@ -11,12 +12,20 @@ from orbis import complete
 
 from tertius.constants import Cmd
 from tertius.types import Pid, Scope
-from tertius.vm.broker_crash import handle_crash, handle_kill
 from tertius.vm.broker_effects import BrokerCmd, decode_frame
-from tertius.vm.broker_handlers import handle_emit, handle_link, handle_monitor, handle_register, handle_whereis
-from tertius.vm.broker_spawn import handle_spawn
+from tertius.vm.broker_handlers import (
+    handle_crash,
+    handle_emit,
+    handle_kill,
+    handle_link,
+    handle_monitor,
+    handle_register,
+    handle_spawn,
+    handle_whereis,
+)
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
+from tertius.vm.messages import frame_id
 
 
 def _is_shutdown_error(err: zmq.ZMQError) -> bool:
@@ -28,29 +37,41 @@ def _is_shutdown_error(err: zmq.ZMQError) -> bool:
 def _make_router(
     ctx: "zmq.Context[zmq.Socket[bytes]]", addr: str
 ) -> "zmq.Socket[bytes]":
+
     router: zmq.Socket[bytes] = ctx.socket(zmq.ROUTER)
     router.setsockopt(zmq.LINGER, 0)
     router.bind(addr)
+
     return router
 
 
 def _make_notifier(
     ctx: "zmq.Context[zmq.Socket[bytes]]", broker_addr: str
 ) -> "zmq.Socket[bytes]":
+    """The notifier DEALER connects back to the data broker so that crash
+    propagation messages (to monitors and linked processes) flow through
+    the same relay path as normal inter-process messages.
+    """
+
     notifier: zmq.Socket[bytes] = ctx.socket(zmq.DEALER)
     notifier.setsockopt(zmq.LINGER, 0)
     notifier.identity = b"vm-notifier"
     notifier.connect(broker_addr)
+
     return notifier
 
 
 def _terminate_procs(state: BrokerState) -> None:
+    """Terminate all spawned processes."""
+
     for proc in state.procs.values():
         if proc.is_alive():
             proc.terminate()
 
 
-def _run_data_loop(router: "zmq.Socket[bytes]") -> None:
+def _run_relay_data_loop(router: "zmq.Socket[bytes]") -> None:
+    """Forward messages between processes."""
+
     while True:
         try:
             _sender, target, sender_pid, body = router.recv_multipart()
@@ -66,6 +87,30 @@ def _run_data_loop(router: "zmq.Socket[bytes]") -> None:
             raise
 
 
+type ControlHandlers = dict[str, Any]
+
+
+def make_control_handlers(
+    alloc_pid: Any,
+    scope: Scope,
+    broker_addr: str,
+    ctrl_addr: str,
+    state: BrokerState,
+    notifier: "zmq.Socket[bytes]",
+    router: "zmq.Socket[bytes]",
+) -> ControlHandlers:
+    return {
+        "spawn_cmd": partial(handle_spawn, alloc_pid, scope, broker_addr, ctrl_addr, state, router),
+        "register_cmd": partial(handle_register, state, router),
+        "whereis_cmd": partial(handle_whereis, state, router),
+        "link_cmd": partial(handle_link, state, notifier, router),
+        "monitor_cmd": partial(handle_monitor, state, notifier, router),
+        "emit_cmd": partial(handle_emit, state, router),
+        "kill_cmd": partial(handle_kill, state, notifier, router),
+        "crash_cmd": partial(handle_crash, state, notifier, router),
+    }
+
+
 def broker_control_gen(router: "zmq.Socket[bytes]") -> Generator[BrokerCmd, Any, None]:
     """Drive the broker control loop as a generator; orbis dispatches each command effect to its handler."""
 
@@ -77,7 +122,7 @@ def broker_control_gen(router: "zmq.Socket[bytes]") -> Generator[BrokerCmd, Any,
                 return
             raise
 
-        requester = frames[0]
+        requester = frame_id(frames)
         effect = decode_frame(frames)
 
         if effect is None:
@@ -103,11 +148,11 @@ def broker_control_gen(router: "zmq.Socket[bytes]") -> Generator[BrokerCmd, Any,
 class Broker:
     """Central VM coordinator. Runs two sockets on separate threads:
 
-    - run_data: a dumb ROUTER that forwards messages between processes by
+    - relay_data: a dumb ROUTER that forwards messages between processes by
       address. Processes talk to each other through this without the broker
       needing to understand the content.
 
-    - run_control: a ROUTER that handles VM-level operations (spawn, kill,
+    - run_vm_control: a ROUTER that handles VM-level operations (spawn, kill,
       link, monitor, etc.). All state that crosses process boundaries lives
       here — process registry, links, monitors, the dead-process tombstones.
     """
@@ -132,55 +177,39 @@ class Broker:
 
     @property
     def emit_queue(self) -> "queue.Queue[Any]":
+        """for telemetry communication"""
+
         return self._state.emit_queue
 
     def alloc_pid(self) -> Pid:
-        # Lock ensures uniqueness across threads; pids are never reused so the
-        # dead dict remains a reliable tombstone after a process exits.
+        """Allocate a new PID for a new process."""
+
         with self._pid_lock:
             pid = Pid(node_id=self._node_id, id=self._next_pid)
             self._next_pid += 1
+
             return pid
 
-    def stop(self) -> None:
-        """Terminate all spawned processes then shut down the broker context.
-
-        Child processes are terminated before ctx.term() so they don't hold
-        IPC connections open while the sockets are being torn down.
-
-        ctx.term() (not ctx.destroy) is used because destroy() closes sockets
-        from the calling thread while broker threads may be inside recv_multipart —
-        libzmq 5.2.5 has an internal assertion that fires in that case. term()
-        instead signals ETERM to all blocking recv calls, letting each thread
-        close its own sockets cleanly before term() returns.
-        """
-        _terminate_procs(self._state)
-        self._ctx.term()
-
-    def run_data(self) -> None:
+    def relay_data(self) -> None:
         """Blind message relay between processes.
 
         Processes address each other directly by pid. The broker just forwards
-        frames without inspecting the body — keeping latency low and the data
-        path free of VM logic.
+        frames without inspecting the body.
         """
+
         router = _make_router(self._ctx, self._broker_addr)
         self.ready.set()
         try:
-            _run_data_loop(router)
+            _run_relay_data_loop(router)
         finally:
             router.close()
 
-    def run_control(self) -> None:
+    def run_vm_control(self) -> None:
         """Serialised handler loop for all VM control operations.
 
         Single-threaded by design: all mutable VM state (_names, _links,
         _monitors, _dead, _procs) is touched exclusively here, so no locking
         is needed beyond alloc_pid.
-
-        The notifier DEALER connects back to the data broker so that crash
-        propagation messages (to monitors and linked processes) flow through
-        the same relay path as normal inter-process messages.
         """
         # Wait until the data broker is bound so the notifier can connect.
         self.ready.wait()
@@ -188,21 +217,21 @@ class Broker:
         notifier = _make_notifier(self._ctx, self._broker_addr)
         router = _make_router(self._ctx, self._ctrl_addr)
 
-        handlers = {
-            "spawn_cmd": partial(
-                handle_spawn, self.alloc_pid, self._scope, self._broker_addr, self._ctrl_addr, self._state, router
-            ),
-            "register_cmd": partial(handle_register, self._state, router),
-            "whereis_cmd": partial(handle_whereis, self._state, router),
-            "link_cmd": partial(handle_link, self._state, notifier, router),
-            "monitor_cmd": partial(handle_monitor, self._state, notifier, router),
-            "emit_cmd": partial(handle_emit, self._state, router),
-            "kill_cmd": partial(handle_kill, self._state, notifier, router),
-            "crash_cmd": partial(handle_crash, self._state, notifier, router),
-        }
+        handlers = make_control_handlers(
+            self.alloc_pid, self._scope, self._broker_addr, self._ctrl_addr, self._state, notifier, router
+        )
 
         try:
             complete(broker_control_gen(router), **handlers)
         finally:
             router.close()
             notifier.close()
+
+    def stop(self) -> None:
+        """Terminate all spawned processes then shut down the broker context.
+
+        Child processes are terminated before ctx.term() so they don't hold
+        IPC connections open while the sockets are being torn down.
+        """
+        _terminate_procs(self._state)
+        self._ctx.term()

@@ -68,8 +68,8 @@ def _root_thread(
 
 
 def _start_broker(broker: Broker) -> None:
-    threading.Thread(target=broker.run_data, daemon=True).start()
-    threading.Thread(target=broker.run_control, daemon=True).start()
+    threading.Thread(target=broker.relay_data, daemon=True).start()
+    threading.Thread(target=broker.run_vm_control, daemon=True).start()
     broker.ready.wait()
 
 

@@ -6,7 +6,7 @@ from orbis import Event
 
 from tertius.constants import Cmd
 from tertius.types import Pid
-from tertius.vm.messages import crash, emit, kill, link, monitor, register, spawn, whereis
+from tertius.vm.messages import crash, emit, frame_command, frame_id, kill, link, monitor, register, spawn, whereis
 
 
 @dataclass
@@ -73,8 +73,8 @@ type BrokerCmd = ESpawnCmd | ERegisterCmd | EWhereisCmd | ELinkCmd | EMonitorCmd
 def decode_frame(frames: list[bytes]) -> BrokerCmd | None:
     """Decode raw ZMQ control frames into a broker command effect, or None for unknown commands."""
 
-    requester = frames[0]
-    command = frames[1]
+    requester = frame_id(frames)
+    command = frame_command(frames)
 
     match command:
         case Cmd.SPAWN:

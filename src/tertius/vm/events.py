@@ -1,4 +1,5 @@
-# VM observability events — constructors for bookman Events emitted at key lifecycle points.
+"""VM observability events — constructors for bookman Events emitted at key lifecycle points."""
+
 import time
 
 from bookman.events import Event, Message, point, span

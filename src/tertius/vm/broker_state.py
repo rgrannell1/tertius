@@ -28,3 +28,7 @@ class BrokerState:
 
     # outbound events for the host
     emit_queue: queue.Queue[Any] = field(default_factory=queue.Queue)
+
+    # READY messages received for the wrong PID during a nested spawn — keyed by PID bytes.
+    # await_ready_gen stashes them here so the correct outer await_ready_gen can claim them.
+    pending_readies: dict[bytes, None] = field(default_factory=dict)

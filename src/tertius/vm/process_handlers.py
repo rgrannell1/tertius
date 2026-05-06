@@ -1,4 +1,5 @@
-# Effect handlers for spawned processes — bridges algebraic effects to ZMQ socket calls.
+"""Effect handlers for spawned processes — bridges algebraic effects to ZMQ socket calls."""
+
 import pickle
 import time
 from collections.abc import Generator
@@ -82,6 +83,7 @@ def _handle_receive(dealer: "zmq.Socket[bytes]", _effect: EReceive) -> Generator
 
     if isinstance(env.body, LinkedCrashError):
         raise env.body
+
     return env
     yield
 

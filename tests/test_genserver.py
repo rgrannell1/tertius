@@ -9,7 +9,7 @@ from typing import Any, ClassVar, LiteralString
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-from orbis import Effect, UnhandledEffect, complete
+from orbis import Effect, UnhandledEffectError, complete
 
 from tertius.effects import EReceive, EReceiveTimeout, ESend
 from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
@@ -477,9 +477,9 @@ def test_effectful_init_computes_initial_state_via_effect():
 
 
 def test_unhandled_effect_from_cast_propagates_out():
-    """Proves that an effect yielded by a handler and not handled by the runner propagates as UnhandledEffect."""
+    """Proves that an effect yielded by a handler and not handled by the runner propagates as UnhandledEffectError."""
 
-    with pytest.raises(UnhandledEffect):
+    with pytest.raises(UnhandledEffectError):
         # no 'double' handler passed — EDouble must bubble out of the gen_server loop
         drive(
             _effectful_cast_server,
@@ -489,9 +489,9 @@ def test_unhandled_effect_from_cast_propagates_out():
 
 
 def test_unhandled_effect_from_call_propagates_out():
-    """Proves that an unhandled effect from handle_call propagates as UnhandledEffect."""
+    """Proves that an unhandled effect from handle_call propagates as UnhandledEffectError."""
 
-    with pytest.raises(UnhandledEffect):
+    with pytest.raises(UnhandledEffectError):
         drive(
             _effectful_call_server,
             7,
@@ -500,7 +500,7 @@ def test_unhandled_effect_from_call_propagates_out():
 
 
 def test_unhandled_effect_from_init_propagates_out():
-    """Proves that an unhandled effect from init propagates as UnhandledEffect."""
+    """Proves that an unhandled effect from init propagates as UnhandledEffectError."""
 
-    with pytest.raises(UnhandledEffect):
+    with pytest.raises(UnhandledEffectError):
         drive(_effectful_init_server, 5, [])

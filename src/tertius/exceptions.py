@@ -1,4 +1,5 @@
-# Exception hierarchy for Tertius runtime errors — process crashes, links, and exits.
+"""Exception hierarchy for Tertius runtime errors — process crashes, links, and exits."""
+
 from tertius.types import Pid
 
 

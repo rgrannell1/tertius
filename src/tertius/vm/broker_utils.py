@@ -9,10 +9,13 @@ def pid_hex(pid: Pid) -> str:
 
 
 def reply(socket: "zmq.Socket[bytes]", requester: bytes, *frames: bytes) -> None:
+    """Send a reply to the requester."""
+
     socket.send_multipart([requester, *frames])
 
 
 def ctrl_send(ctrl: "zmq.Socket[bytes]", *frames: bytes) -> None:
     """Send frames to the broker control socket and discard the ack."""
+
     ctrl.send_multipart(list(frames))
     ctrl.recv_multipart()

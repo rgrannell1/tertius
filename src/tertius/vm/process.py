@@ -1,4 +1,5 @@
-# Process entry point and lifecycle — runs a generator inside a spawned OS process.
+"""Process entry point and lifecycle — runs a generator inside a spawned OS process."""
+
 import sys
 import traceback
 from collections.abc import Callable
@@ -15,7 +16,7 @@ from tertius.vm.messages import crash
 from tertius.vm.process_handlers import make_handlers
 
 
-def _primed(gen: Any, ctrl: "zmq.Socket[bytes]") -> Any:
+def _primed_fn(gen: Any, ctrl: "zmq.Socket[bytes]") -> Any:
     """Wrap a generator so Cmd.READY is sent only after it survives its first step.
 
     If the generator raises before yielding, no Cmd.READY is sent — the broker detects
@@ -46,11 +47,13 @@ def _primed(gen: Any, ctrl: "zmq.Socket[bytes]") -> Any:
 
 
 def _on_normal_exit(pid: Pid, ctrl: "zmq.Socket[bytes]") -> None:
+    """Handle normal process exit: notify the broker."""
+
     ctrl_send(ctrl, *crash.encode(NormalExitError(pid)))
 
 
 def _on_crash(pid: Pid, ctrl: "zmq.Socket[bytes]", err: Exception) -> None:
-    """Handle process crashes: log the error and notify the broker."""
+    """Handle process crash: log the error and notify the broker."""
 
     print(f"[tertius] process {pid} crashed: {err}", file=sys.stderr, flush=True)
     traceback.print_exc(file=sys.stderr)
@@ -98,7 +101,8 @@ def process_entry(
 
     try:
         fn = scope[fn_name]
-        complete(_primed(fn(*args), ctrl), **make_handlers(pid, dealer, ctrl))
+        gen = fn(*args)
+        complete(_primed_fn(gen, ctrl), **make_handlers(pid, dealer, ctrl))
         _on_normal_exit(pid, ctrl)
     except Exception as err:  # noqa: BLE001
         _on_crash(pid, ctrl, err)

@@ -8,7 +8,7 @@ import zmq
 from tertius.effects import EEmit, ESelf, ESend, ESleep, ESpawn
 from tertius.types import Pid
 from tertius.vm import run, vm_run
-from tertius.vm.broker import _run_data_loop
+from tertius.vm.broker import _run_relay_data_loop
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -47,7 +47,7 @@ _SCOPE = {"sleeping_job": sleeping_job, "flood_self": flood_self, "root_with_flo
 
 
 def test_data_loop_exits_cleanly_when_send_raises_context_terminated():
-    """Proves _run_data_loop exits cleanly when ContextTerminated fires during send_multipart.
+    """Proves _run_relay_data_loop exits cleanly when ContextTerminated fires during send_multipart.
 
     This is a unit-level reproduction of the shutdown race:
     recv_multipart() succeeds → ctx.term() is called → send_multipart() raises ContextTerminated.
@@ -64,8 +64,8 @@ def test_data_loop_exits_cleanly_when_send_raises_context_terminated():
             raise zmq.ZMQError(zmq.ETERM)
 
     # Before fix: ZMQError from send_multipart propagates uncaught.
-    # After fix:  _run_data_loop returns cleanly.
-    _run_data_loop(_TerminatesOnSend())
+    # After fix:  _run_relay_data_loop returns cleanly.
+    _run_relay_data_loop(_TerminatesOnSend())
 
 
 def test_no_unhandled_thread_exception_under_high_message_traffic():
