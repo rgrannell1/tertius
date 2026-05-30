@@ -1,4 +1,5 @@
-# Shared mutable state for the broker — process registry, links, monitors, and tombstones.
+"""Shared mutable state for the broker — process registry, links, monitors, and tombstones."""
+
 import queue
 from dataclasses import dataclass, field
 from multiprocessing.process import BaseProcess

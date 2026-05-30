@@ -4,7 +4,19 @@ import random
 from collections.abc import Generator
 from typing import Any
 
-from tertius.effects import EEmit, EKill, ELink, EMonitor, EReceiveTimeout, ERegister, ESelf, ESend, ESleep, ESpawn, EWhereis
+from tertius.effects import (
+    EEmit,
+    EKill,
+    ELink,
+    EMonitor,
+    EReceiveTimeout,
+    ERegister,
+    ESelf,
+    ESend,
+    ESleep,
+    ESpawn,
+    EWhereis,
+)
 from tertius.exceptions import DeadProcessError
 from tertius.types import Envelope, Pid
 
@@ -72,7 +84,9 @@ def _parameterize_action(rng: random.Random, state: FuzzRunState, action_type: s
             return GetSelfAction()
         case "fake_pid":
             # Fabricate a PID with a plausible node_id but an id that was never allocated.
-            return FakePidAction(node_id=rng.randint(0, 2**32 - 1), pid_id=rng.randint(10_000, 2**63))
+            node_id = rng.randint(0, 2**32 - 1)
+            pid_id = rng.randint(10_000, 2**63)
+            return FakePidAction(node_id=node_id, pid_id=pid_id)
         case "spawn_linker":
             return SpawnLinkerAction(target_idx=rng.randrange(len(state.pid_pool)))
         case "sleep":
@@ -108,13 +122,19 @@ def execute_send(state: FuzzRunState, target_idx: int, body: Any) -> Generator[A
 
 
 def execute_monitor(state: FuzzRunState, target_idx: int) -> Generator[Any, Any, None]:
-    """Set a one-shot monitor; retroactive ProcessCrashError delivered as a message if already dead."""
+    """Set a one-shot monitor.
+
+    retroactive ProcessCrashError delivered as a message if already dead.
+    """
     target = state.pid_pool[target_idx]
     yield EMonitor(pid=target)
 
 
 def execute_link(state: FuzzRunState, target_idx: int) -> Generator[Any, Any, None]:
-    """Bidirectionally link to a process; retroactive LinkedCrashError queued as a message if already dead."""
+    """Bidirectionally link to a process.
+
+    retroactive LinkedCrashError queued as a message if already dead.
+    """
     target = state.pid_pool[target_idx]
     yield ELink(pid=target)
 

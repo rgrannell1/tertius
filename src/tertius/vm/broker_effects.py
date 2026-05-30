@@ -1,4 +1,5 @@
-# Broker command effects — one dataclass per control command, plus decode_frame.
+"""Broker command effects — one dataclass per control command, plus decode_frame."""
+
 from dataclasses import dataclass
 from typing import Any, ClassVar, LiteralString
 
@@ -6,7 +7,18 @@ from orbis import Event
 
 from tertius.constants import Cmd
 from tertius.types import Pid
-from tertius.vm.messages import crash, emit, frame_command, frame_id, kill, link, monitor, register, spawn, whereis
+from tertius.vm.messages import (
+    crash,
+    emit,
+    frame_command,
+    frame_id,
+    kill,
+    link,
+    monitor,
+    register,
+    spawn,
+    whereis,
+)
 
 
 @dataclass
@@ -67,7 +79,17 @@ class ECrashCmd(Event):
     requester: bytes
 
 
-type BrokerCmd = ESpawnCmd | ERegisterCmd | EWhereisCmd | ELinkCmd | EMonitorCmd | EEmitCmd | EKillCmd | ECrashCmd
+# Broker command effect types
+type BrokerCmd = (
+    ESpawnCmd
+    | ERegisterCmd
+    | EWhereisCmd
+    | ELinkCmd
+    | EMonitorCmd
+    | EEmitCmd
+    | EKillCmd
+    | ECrashCmd
+)
 
 
 def decode_frame(frames: list[bytes]) -> BrokerCmd | None:
@@ -93,6 +115,8 @@ def decode_frame(frames: list[bytes]) -> BrokerCmd | None:
         case Cmd.KILL:
             return EKillCmd(target=kill.decode(frames), requester=requester)
         case Cmd.CRASH:
-            return ECrashCmd(pid=Pid.from_bytes(requester), reason=crash.decode(frames), requester=requester)
+            pid = Pid.from_bytes(requester)
+            reason = crash.decode(frames)
+            return ECrashCmd(pid=pid, reason=reason, requester=requester)
         case _:
             return None

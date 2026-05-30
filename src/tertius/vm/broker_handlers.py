@@ -1,4 +1,5 @@
-# All broker command handlers — spawn, register, whereis, link, monitor, emit, kill, crash.
+"""All broker command handlers — spawn, register, whereis, link, monitor, emit, kill, crash."""
+
 import multiprocessing
 import pickle
 import time
@@ -9,7 +10,12 @@ from typing import Any
 import zmq
 
 from tertius.constants import SPAWN_READY_TIMEOUT_MS, Cmd
-from tertius.exceptions import DeadProcessError, LinkedCrashError, NormalExitError, ProcessCrashError
+from tertius.exceptions import (
+    DeadProcessError,
+    LinkedCrashError,
+    NormalExitError,
+    ProcessCrashError,
+)
 from tertius.types import Pid, Scope
 from tertius.vm.broker_effects import (
     ECrashCmd,
@@ -55,6 +61,8 @@ def handle_register(
     router: "zmq.Socket[bytes]",
     effect: ERegisterCmd,
 ) -> Generator[None, Any, None]:
+    """Register a process name."""
+
     # Names are process-scoped: the pid is derived from the requester identity
     # rather than the message body, so a process can only register itself.
     pid = Pid.from_bytes(effect.requester)
@@ -70,6 +78,8 @@ def handle_whereis(
     router: "zmq.Socket[bytes]",
     effect: EWhereisCmd,
 ) -> Generator[None, Any, None]:
+    """Lookup a process by name."""
+
     pid = state.names.get(effect.name)
     reply(router, effect.requester, *whereis_reply.encode(pid))
     return
@@ -82,6 +92,8 @@ def handle_link(
     router: "zmq.Socket[bytes]",
     effect: ELinkCmd,
 ) -> Generator[None, Any, None]:
+    """Bidirectionally link two processes, so that if one crashes the other is notified."""
+
     requester_pid = Pid.from_bytes(effect.requester)
     # Ack immediately so the requester isn't blocked while we check the tombstone.
     reply(router, effect.requester, Cmd.OK)
@@ -110,6 +122,8 @@ def handle_monitor(
     router: "zmq.Socket[bytes]",
     effect: EMonitorCmd,
 ) -> Generator[None, Any, None]:
+    """Notify the broker that this process wants to monitor the target PID."""
+
     requester_pid = Pid.from_bytes(effect.requester)
     reply(router, effect.requester, Cmd.OK)
 
@@ -151,8 +165,8 @@ def _notify_monitors(
     pid: Pid,
     reason: Exception,
 ) -> list[Pid]:
-    # Monitors receive a one-shot notification and are then removed — they don't
-    # re-arm automatically, matching Erlang's monitor semantics.
+    """Notify the monitors of a process crash."""
+
     crash_msg = ProcessCrashError(pid=pid, reason=reason)
     watchers = list(state.monitors.pop(pid, []))
 
@@ -168,6 +182,8 @@ def _notify_links(
     pid: Pid,
     reason: Exception,
 ) -> list[Pid]:
+    """Notify the links of a process crash."""
+
     if isinstance(reason, NormalExitError):
         state.links.pop(pid, None)
         return []
@@ -219,6 +235,8 @@ def _emit_crash_events(
     watchers: list[Pid],
     peers: list[Pid],
 ) -> None:
+    """Emit crash events for a process."""
+
     for name in unbound:
         state.emit_queue.put(name_unbound(pid, name))
 
@@ -235,6 +253,8 @@ def handle_kill(
     router: "zmq.Socket[bytes]",
     effect: EKillCmd,
 ) -> Generator[None, Any, None]:
+    """Kill a process."""
+
     if effect.target in state.dead:
         reply(router, effect.requester, Cmd.ERROR, pickle.dumps(DeadProcessError(effect.target)))
         return
@@ -264,6 +284,8 @@ def handle_crash(
     router: "zmq.Socket[bytes]",
     effect: ECrashCmd,
 ) -> Generator[None, Any, None]:
+    """Handle a process crash."""
+
     # A process reports its own crash rather than the broker detecting it via
     # polling, so the reason is accurate and propagation is synchronous.
     if isinstance(effect.reason, NormalExitError):
@@ -287,6 +309,8 @@ def _start_process(
     scope: Scope,
     state: BrokerState,
 ) -> BaseProcess:
+    """Start a new process."""
+
     # Daemon=True so child processes don't outlive the broker if it exits uncleanly.
     # spawn (not fork) avoids inheriting the parent's ZMQ IO threads, which
     # causes libzmq to abort() when the child later calls zmq_msg_recv.
@@ -362,6 +386,8 @@ def handle_spawn(
     router: "zmq.Socket[bytes]",
     effect: ESpawnCmd,
 ) -> Generator[Any, Any, None]:
+    """Spawn a new process."""
+
     fn_name = effect.fn_name
     args = effect.args
 

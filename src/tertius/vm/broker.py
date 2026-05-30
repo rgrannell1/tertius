@@ -112,7 +112,10 @@ def make_control_handlers(
 
 
 def broker_control_gen(router: "zmq.Socket[bytes]") -> Generator[BrokerCmd, Any, None]:
-    """Drive the broker control loop as a generator; orbis dispatches each command effect to its handler."""
+    """Drive the broker control loop as a generator.
+
+    orbis dispatches each command effect to its handler.
+    """
 
     while True:
         try:
@@ -217,8 +220,12 @@ class Broker:
         notifier = _make_notifier(self._ctx, self._broker_addr)
         router = _make_router(self._ctx, self._ctrl_addr)
 
+        alloc_pid = self.alloc_pid
+        state = self._state
+        broker_addr = self._broker_addr
+        ctrl_addr = self._ctrl_addr
         handlers = make_control_handlers(
-            self.alloc_pid, self._scope, self._broker_addr, self._ctrl_addr, self._state, notifier, router
+            alloc_pid, self._scope, broker_addr, ctrl_addr, state, notifier, router
         )
 
         try:

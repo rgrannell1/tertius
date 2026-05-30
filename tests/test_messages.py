@@ -63,7 +63,10 @@ def test_pid_roundtrips_through_bytes(pid):
 
 @given(pids, fn_names, simple_args)
 def test_frame_accessors_decompose_correctly(pid, fn_name, args):
-    """Proves that frame_id, frame_command, frame_payload correctly decompose a ROUTER-received frame."""
+    """Proves frame accessors correctly decompose ROUTER frames.
+
+    frame_id, frame_command, and frame_payload work together.
+    """
 
     frames = router_wrap(spawn.encode(fn_name, args), identity=bytes(pid))
     assert frame_id(frames) == bytes(pid)
@@ -147,7 +150,10 @@ def test_whereis_reply_roundtrips(pid):
 
 @given(pids, pids, st.integers() | st.text() | st.binary())
 def test_envelope_roundtrips(target, sender, body):
-    """Proves that encode_envelope body survives serialisation; sender pid is preserved on receipt."""
+    """Proves envelope body survives serialisation.
+
+    sender pid is preserved on receipt.
+    """
 
     encoded = envelope.encode(target, sender, body)
     # Simulate ROUTER routing: strip target identity, leaving [sender_pid, body]

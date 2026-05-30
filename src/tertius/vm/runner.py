@@ -1,4 +1,5 @@
-# VM entry point — wires the broker, process threads, and effect handlers together.
+"""VM entry point — wires the broker, process threads, and effect handlers together."""
+
 import hashlib
 import itertools
 import os
@@ -54,6 +55,7 @@ def _root_thread(
     root_result: list[Any],
     emit_queue: "queue.Queue[Any]",
 ) -> None:
+    """Root process thread: run the function and handle exceptions."""
 
     try:
         result = complete(fn(*args), **make_handlers(root_pid, dealer, ctrl))
@@ -68,6 +70,8 @@ def _root_thread(
 
 
 def _start_broker(broker: Broker) -> None:
+    """Start the broker's data and control threads."""
+
     threading.Thread(target=broker.relay_data, daemon=True).start()
     threading.Thread(target=broker.run_vm_control, daemon=True).start()
     broker.ready.wait()
@@ -76,6 +80,8 @@ def _start_broker(broker: Broker) -> None:
 def vm_run(
     fn: Callable[..., Any], args: tuple[Any, ...], scope: Scope
 ) -> Generator[Any, None, Any]:
+    """Run the function in the Tertius runtime."""
+
     vm_pid = os.getpid()
     node_id = make_node_id(socket.gethostname(), vm_pid)
     broker_addr, ctrl_addr = _ipc_addrs(vm_pid, _vm_id())

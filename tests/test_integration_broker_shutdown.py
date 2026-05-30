@@ -33,12 +33,19 @@ def flood_self() -> Generator[Any, Any, None]:
 
 
 def root_with_flood() -> Generator[Any, Any, None]:
-    """Spawn several flood workers then exit immediately; the router is still active during teardown."""
+    """Spawn several flood workers then exit immediately.
+
+    The router is still active during teardown.
+    """
     for _ in range(4):
         yield ESpawn(fn_name="flood_self")
 
 
-_SCOPE = {"sleeping_job": sleeping_job, "flood_self": flood_self, "root_with_flood": root_with_flood}
+_SCOPE = {
+    "sleeping_job": sleeping_job,
+    "flood_self": flood_self,
+    "root_with_flood": root_with_flood,
+}
 
 
 # ---------------------------------------------------------------------------

@@ -59,7 +59,7 @@ def _root_message_arrives_in_time() -> Generator[Any, Any, Any]:
 
 
 def test_receive_timeout_returns_message_when_it_arrives(collect):
-    """Proves that EReceiveTimeout returns the envelope when a message arrives before the deadline."""
+    """Proves EReceiveTimeout returns the envelope before timeout."""
 
     result, _ = collect(_root_message_arrives_in_time, scope=_SCOPE)
     assert result == "on-time"

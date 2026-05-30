@@ -147,7 +147,7 @@ def test_fuzz_vm_survives_random_action_sequence(collect, seed):
         _assert_telemetry_invariants(events)
     except AssertionError as err:
         actions = generate_action_sequence(seed, SEQUENCE_LENGTH)
-        pytest.fail(
-            f"\n{_format_action_sequence(seed, actions)}\n\n{_format_event_stream(events)}\n\nViolation: {err}",
-            pytrace=False,
-        )
+        formatted_actions = _format_action_sequence(seed, actions)
+        formatted_events = _format_event_stream(events)
+        msg = f"\n{formatted_actions}\n\n{formatted_events}\n\nViolation: {err}"
+        pytest.fail(msg, pytrace=False)

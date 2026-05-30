@@ -1,10 +1,12 @@
-# Low-level ZMQ socket utilities shared across broker modules.
+"""Low-level ZMQ socket utilities shared across broker modules."""
+
 import zmq
 
 from tertius.types import Pid
 
 
 def pid_hex(pid: Pid) -> str:
+    """Convert a PID to a hex string."""
     return bytes(pid).hex()
 
 

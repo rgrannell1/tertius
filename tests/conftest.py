@@ -11,7 +11,9 @@ from tertius.vm import run
 def collect():
     """Drain a run() call, returning (return_value, [all_emitted_events])."""
 
-    def _collect(fn: Callable[..., Any], *args: Any, scope: dict | None = None) -> tuple[Any, list[Any]]:
+    def _collect(
+        fn: Callable[..., Any], *args: Any, scope: dict | None = None
+    ) -> tuple[Any, list[Any]]:
         gen = run(fn, *args, scope=scope)
         events: list[Any] = []
         try:

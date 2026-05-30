@@ -285,7 +285,10 @@ def test_call_helper_returns_reply_body():
 
 
 def test_call_helper_ignores_non_matching_replies():
-    """Proves that call() discards envelopes whose ref does not match, then waits for the correct one."""
+    """Proves that call() discards non-matching refs.
+
+    Then waits for the correct envelope.
+    """
 
     ref_holder: list[int] = []
     call_count = 0
@@ -413,7 +416,10 @@ _effectful_init_server = gen_server(
 
 
 def test_effectful_cast_updates_state_via_yielded_effect():
-    """Proves that a generator handle_cast can yield an effect and use its return value to update state."""
+    """Proves that a generator handle_cast yields an effect.
+
+    And uses its return value to update state.
+    """
 
     sent = drive(
         _effectful_cast_server,
@@ -441,7 +447,10 @@ def test_effectful_cast_state_accumulates_across_messages():
 
 
 def test_effectful_call_reply_uses_yielded_effect():
-    """Proves that a generator handle_call can yield an effect and include its return value in the reply."""
+    """Proves that a generator handle_call yields an effect.
+
+    And includes its return value in the reply.
+    """
 
     sent = drive(
         _effectful_call_server,
@@ -477,7 +486,10 @@ def test_effectful_init_computes_initial_state_via_effect():
 
 
 def test_unhandled_effect_from_cast_propagates_out():
-    """Proves that an effect yielded by a handler and not handled by the runner propagates as UnhandledEffectError."""
+    """Proves that unhandled effects propagate as UnhandledEffectError.
+
+    When yielded by a handler but not handled by the runner.
+    """
 
     with pytest.raises(UnhandledEffectError):
         # no 'double' handler passed — EDouble must bubble out of the gen_server loop

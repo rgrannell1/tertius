@@ -60,8 +60,13 @@ def _handle_spawn(ctrl: "zmq.Socket[bytes]", effect: ESpawn) -> Generator[None, 
     yield
 
 
-def _handle_send(dealer: "zmq.Socket[bytes]", pid: Pid, effect: ESend) -> Generator[None, Any, None]:
-    """Send a message to the target PID by encoding it as an Envelope and sending it to the broker."""
+def _handle_send(
+    dealer: "zmq.Socket[bytes]", pid: Pid, effect: ESend
+) -> Generator[None, Any, None]:
+    """Send a message to the target PID.
+
+    Encode it as an Envelope and send it to the broker.
+    """
 
     dealer.send_multipart(envelope.encode(effect.pid, pid, effect.body))
     return
@@ -76,7 +81,9 @@ def _handle_link(ctrl: "zmq.Socket[bytes]", effect: ELink) -> Generator[None, An
     yield
 
 
-def _handle_receive(dealer: "zmq.Socket[bytes]", _effect: EReceive) -> Generator[None, Any, Envelope]:
+def _handle_receive(
+    dealer: "zmq.Socket[bytes]", _effect: EReceive
+) -> Generator[None, Any, Envelope]:
     """Wait for a message and return it as an Envelope."""
 
     env = envelope.decode(dealer.recv_multipart())
@@ -96,7 +103,9 @@ def _handle_register(ctrl: "zmq.Socket[bytes]", effect: ERegister) -> Generator[
     yield
 
 
-def _handle_whereis(ctrl: "zmq.Socket[bytes]", effect: EWhereis) -> Generator[None, Any, Pid | None]:
+def _handle_whereis(
+    ctrl: "zmq.Socket[bytes]", effect: EWhereis
+) -> Generator[None, Any, Pid | None]:
     """Query the broker for the PID registered under the given name, if any."""
 
     ctrl.send_multipart(whereis.encode(effect.name))
@@ -107,7 +116,7 @@ def _handle_whereis(ctrl: "zmq.Socket[bytes]", effect: EWhereis) -> Generator[No
 def _handle_receive_timeout(
     dealer: "zmq.Socket[bytes]", effect: EReceiveTimeout
 ) -> "Generator[None, Any, Envelope | None]":
-    """ "Wait for a message with a timeout; return None if the timeout expires."""
+    """ Wait for a message with a timeout; return None if the timeout expires."""
 
     poller = zmq.Poller()
     poller.register(dealer, zmq.POLLIN)
