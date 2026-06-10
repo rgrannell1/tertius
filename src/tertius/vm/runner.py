@@ -13,9 +13,11 @@ from typing import Any
 import zmq
 from orbis import complete
 
+from tertius.transport_types import IpcTransport, Transport
 from tertius.types import Pid, Scope
 from tertius.vm.broker import Broker
 from tertius.vm.process_handlers import make_handlers
+from tertius.vm.transport import build_addresses, make_dealer
 
 
 def make_node_id(host: str, port: int) -> int:
@@ -26,12 +28,6 @@ def make_node_id(host: str, port: int) -> int:
 
 _DONE = object()
 _vm_id = itertools.count().__next__
-
-
-def _ipc_addrs(vm_pid: int, vm_instance: int) -> tuple[str, str]:
-    # vm_pid stands in for a port until the broker binds a TCP address
-    base = f"ipc:///tmp/tertius-{vm_pid}-{vm_instance}"
-    return f"{base}-data.sock", f"{base}-ctrl.sock"
 
 
 def _drain_queue(emit_queue: "queue.Queue[Any]") -> Generator[Any, None, None]:
@@ -78,28 +74,27 @@ def _start_broker(broker: Broker) -> None:
 
 
 def vm_run(
-    fn: Callable[..., Any], args: tuple[Any, ...], scope: Scope
+    fn: Callable[..., Any],
+    args: tuple[Any, ...],
+    scope: Scope,
+    transport: Transport | None = None,
 ) -> Generator[Any, None, Any]:
     """Run the function in the Tertius runtime."""
 
+    selected_transport = transport or IpcTransport()
     vm_pid = os.getpid()
     node_id = make_node_id(socket.gethostname(), vm_pid)
-    broker_addr, ctrl_addr = _ipc_addrs(vm_pid, _vm_id())
+    broker_addr, ctrl_addr = build_addresses(selected_transport, vm_pid, _vm_id())
     ctx: zmq.Context[zmq.Socket[bytes]] = zmq.Context()
-    broker = Broker(broker_addr, ctrl_addr, ctx, scope, node_id)
+    broker = Broker(broker_addr, ctrl_addr, ctx, scope, node_id, selected_transport)
 
     _start_broker(broker)
 
     root_pid = broker.alloc_pid()
     root_ctx: zmq.Context[zmq.Socket[bytes]] = zmq.Context()
 
-    dealer: zmq.Socket[bytes] = root_ctx.socket(zmq.DEALER)
-    dealer.identity = bytes(root_pid)
-    dealer.connect(broker_addr)
-
-    ctrl: zmq.Socket[bytes] = root_ctx.socket(zmq.DEALER)
-    ctrl.identity = bytes(root_pid)
-    ctrl.connect(ctrl_addr)
+    dealer = make_dealer(root_ctx, root_pid, broker_addr, selected_transport)
+    ctrl = make_dealer(root_ctx, root_pid, ctrl_addr, selected_transport)
 
     root_exc: list[BaseException] = []
     root_result: list[Any] = []
@@ -133,6 +128,9 @@ def vm_run(
 
 
 def run(
-    fn: Callable[..., Any], *args: Any, scope: Scope | None = None
+    fn: Callable[..., Any],
+    *args: Any,
+    scope: Scope | None = None,
+    transport: Transport | None = None,
 ) -> Generator[Any, None, Any]:
-    return (yield from vm_run(fn, args, scope or {}))
+    return (yield from vm_run(fn, args, scope or {}, transport))

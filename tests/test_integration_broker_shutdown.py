@@ -1,7 +1,7 @@
 """Integration tests for VM and broker lifecycle — clean shutdown after completion."""
 import threading
 from collections.abc import Generator
-from typing import Any
+from typing import Any, cast
 
 import zmq
 
@@ -72,7 +72,8 @@ def test_data_loop_exits_cleanly_when_send_raises_context_terminated():
 
     # Before fix: ZMQError from send_multipart propagates uncaught.
     # After fix:  _run_relay_data_loop returns cleanly.
-    _run_relay_data_loop(_TerminatesOnSend())
+    router = cast(zmq.Socket[bytes], _TerminatesOnSend())
+    _run_relay_data_loop(router)
 
 
 def test_no_unhandled_thread_exception_under_high_message_traffic():
@@ -86,7 +87,9 @@ def test_no_unhandled_thread_exception_under_high_message_traffic():
     original_hook = threading.excepthook
 
     def _capture(args: threading.ExceptHookArgs) -> None:
-        thread_exceptions.append(args.exc_value)
+        exc_value = args.exc_value
+        if exc_value is not None:
+            thread_exceptions.append(exc_value)
 
     threading.excepthook = _capture
     try:

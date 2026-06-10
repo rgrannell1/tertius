@@ -16,6 +16,7 @@ from tertius.exceptions import (
     NormalExitError,
     ProcessCrashError,
 )
+from tertius.transport_types import Transport
 from tertius.types import Pid, Scope
 from tertius.vm.broker_effects import (
     ECrashCmd,
@@ -63,6 +64,7 @@ def handle_register(
 ) -> Generator[None, Any, None]:
     """Register a process name."""
 
+    yield from ()
     # Names are process-scoped: the pid is derived from the requester identity
     # rather than the message body, so a process can only register itself.
     pid = Pid.from_bytes(effect.requester)
@@ -70,7 +72,6 @@ def handle_register(
     state.emit_queue.put(name_registered(pid, effect.name))
     reply(router, effect.requester, Cmd.OK)
     return
-    yield
 
 
 def handle_whereis(
@@ -80,10 +81,10 @@ def handle_whereis(
 ) -> Generator[None, Any, None]:
     """Lookup a process by name."""
 
+    yield from ()
     pid = state.names.get(effect.name)
     reply(router, effect.requester, *whereis_reply.encode(pid))
     return
-    yield
 
 
 def handle_link(
@@ -94,6 +95,7 @@ def handle_link(
 ) -> Generator[None, Any, None]:
     """Bidirectionally link two processes, so that if one crashes the other is notified."""
 
+    yield from ()
     requester_pid = Pid.from_bytes(effect.requester)
     # Ack immediately so the requester isn't blocked while we check the tombstone.
     reply(router, effect.requester, Cmd.OK)
@@ -107,13 +109,11 @@ def handle_link(
         )
         state.emit_queue.put(link_retroactive(effect.pid))
         return
-        yield
 
     state.links.setdefault(requester_pid, set()).add(effect.pid)
     state.links.setdefault(effect.pid, set()).add(requester_pid)
     state.emit_queue.put(link_established(requester_pid))
     return
-    yield
 
 
 def handle_monitor(
@@ -124,6 +124,7 @@ def handle_monitor(
 ) -> Generator[None, Any, None]:
     """Notify the broker that this process wants to monitor the target PID."""
 
+    yield from ()
     requester_pid = Pid.from_bytes(effect.requester)
     reply(router, effect.requester, Cmd.OK)
 
@@ -137,12 +138,10 @@ def handle_monitor(
         )
         state.emit_queue.put(monitor_retroactive(effect.pid))
         return
-        yield
 
     state.monitors.setdefault(effect.pid, set()).add(requester_pid)
     state.emit_queue.put(monitor_established(requester_pid))
     return
-    yield
 
 
 def handle_emit(
@@ -153,10 +152,10 @@ def handle_emit(
     """Emitted values are surfaced to the host application via the queue rather
     than being routed to another process, so they cross the VM boundary."""
 
+    yield from ()
     state.emit_queue.put(effect.body)
     reply(router, effect.requester, Cmd.OK)
     return
-    yield
 
 
 def _notify_monitors(
@@ -255,10 +254,10 @@ def handle_kill(
 ) -> Generator[None, Any, None]:
     """Kill a process."""
 
+    yield from ()
     if effect.target in state.dead:
         reply(router, effect.requester, Cmd.ERROR, pickle.dumps(DeadProcessError(effect.target)))
         return
-        yield
 
     # Ack before terminating so the caller isn't blocked waiting on a process
     # that may take a moment to actually die.
@@ -275,7 +274,6 @@ def handle_kill(
     unbound, watchers, peers = _record_crash(state, notifier, effect.target, killed_reason)
     _emit_crash_events(state, effect.target, unbound, watchers, peers)
     return
-    yield
 
 
 def handle_crash(
@@ -286,6 +284,7 @@ def handle_crash(
 ) -> Generator[None, Any, None]:
     """Handle a process crash."""
 
+    yield from ()
     # A process reports its own crash rather than the broker detecting it via
     # polling, so the reason is accurate and propagation is synchronous.
     if isinstance(effect.reason, NormalExitError):
@@ -297,7 +296,6 @@ def handle_crash(
     _emit_crash_events(state, effect.pid, unbound, watchers, peers)
     reply(router, effect.requester, Cmd.OK)
     return
-    yield
 
 
 def _start_process(
@@ -308,6 +306,7 @@ def _start_process(
     ctrl_addr: str,
     scope: Scope,
     state: BrokerState,
+    transport: Transport,
 ) -> BaseProcess:
     """Start a new process."""
 
@@ -316,7 +315,7 @@ def _start_process(
     # causes libzmq to abort() when the child later calls zmq_msg_recv.
     proc = _SPAWN_CTX.Process(
         target=process_entry,
-        args=(pid.node_id, pid.id, broker_addr, ctrl_addr, fn_name, args, scope),
+        args=(pid.node_id, pid.id, broker_addr, ctrl_addr, fn_name, args, scope, transport),
         daemon=True,
     )
     proc.start()
@@ -384,10 +383,12 @@ def handle_spawn(
     ctrl_addr: str,
     state: BrokerState,
     router: "zmq.Socket[bytes]",
+    transport: Transport,
     effect: ESpawnCmd,
 ) -> Generator[Any, Any, None]:
     """Spawn a new process."""
 
+    yield from ()
     fn_name = effect.fn_name
     args = effect.args
 
@@ -396,7 +397,9 @@ def handle_spawn(
 
     new_pid = alloc_pid()
     spawn_start = time.time()
-    proc = _start_process(new_pid, fn_name, args, broker_addr, ctrl_addr, scope, state)
+    proc = _start_process(
+        new_pid, fn_name, args, broker_addr, ctrl_addr, scope, state, transport
+    )
     state.emit_queue.put(spawn_started(new_pid))
 
     try:
@@ -412,4 +415,3 @@ def handle_spawn(
     state.emit_queue.put(spawn_ready(new_pid, spawn_start))
     reply(router, effect.requester, *pid_reply.encode(new_pid))
     return
-    yield

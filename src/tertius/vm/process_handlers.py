@@ -43,13 +43,14 @@ from tertius.vm.messages import (
 def _handle_self(pid: Pid, _effect: ESelf) -> Generator[None, Any, Pid]:
     """Return the current process's PID."""
 
+    yield from ()
     return pid
-    yield
 
 
 def _handle_spawn(ctrl: "zmq.Socket[bytes]", effect: ESpawn) -> Generator[None, Any, Pid]:
     """Spawn a new process by sending a spawn request to the broker and returning the new PID."""
 
+    yield from ()
     ctrl.send_multipart(spawn.encode(effect.fn_name, effect.args))
     reply = ctrl.recv_multipart()
 
@@ -57,7 +58,6 @@ def _handle_spawn(ctrl: "zmq.Socket[bytes]", effect: ESpawn) -> Generator[None, 
         raise pickle.loads(reply[1])
 
     return pid_reply.decode(reply)
-    yield
 
 
 def _handle_send(
@@ -68,17 +68,17 @@ def _handle_send(
     Encode it as an Envelope and send it to the broker.
     """
 
+    yield from ()
     dealer.send_multipart(envelope.encode(effect.pid, pid, effect.body))
     return
-    yield
 
 
 def _handle_link(ctrl: "zmq.Socket[bytes]", effect: ELink) -> Generator[None, Any, None]:
     """Link the current process to the target PID by sending a message to the broker."""
 
+    yield from ()
     ctrl_send(ctrl, *link.encode(effect.pid))
     return
-    yield
 
 
 def _handle_receive(
@@ -86,21 +86,21 @@ def _handle_receive(
 ) -> Generator[None, Any, Envelope]:
     """Wait for a message and return it as an Envelope."""
 
+    yield from ()
     env = envelope.decode(dealer.recv_multipart())
 
     if isinstance(env.body, LinkedCrashError):
         raise env.body
 
     return env
-    yield
 
 
 def _handle_register(ctrl: "zmq.Socket[bytes]", effect: ERegister) -> Generator[None, Any, None]:
     """Register the current process under the given name by sending a message to the broker."""
 
+    yield from ()
     ctrl_send(ctrl, *register.encode(effect.name))
     return
-    yield
 
 
 def _handle_whereis(
@@ -108,9 +108,9 @@ def _handle_whereis(
 ) -> Generator[None, Any, Pid | None]:
     """Query the broker for the PID registered under the given name, if any."""
 
+    yield from ()
     ctrl.send_multipart(whereis.encode(effect.name))
     return whereis_reply.decode(ctrl.recv_multipart())
-    yield
 
 
 def _handle_receive_timeout(
@@ -118,6 +118,7 @@ def _handle_receive_timeout(
 ) -> "Generator[None, Any, Envelope | None]":
     """ Wait for a message with a timeout; return None if the timeout expires."""
 
+    yield from ()
     poller = zmq.Poller()
     poller.register(dealer, zmq.POLLIN)
     ready = dict(poller.poll(effect.timeout_ms))
@@ -130,40 +131,39 @@ def _handle_receive_timeout(
         raise env.body
 
     return env
-    yield
 
 
 def _handle_monitor(ctrl: "zmq.Socket[bytes]", effect: EMonitor) -> Generator[None, Any, None]:
     """Notify the broker that this process wants to monitor the target PID"""
 
+    yield from ()
     ctrl_send(ctrl, *monitor.encode(effect.pid))
     return
-    yield
 
 
 def _handle_sleep(effect: ESleep) -> Generator[None, Any, None]:
     """Simply sleep for a bit"""
 
+    yield from ()
     time.sleep(effect.ms / 1000)
     return
-    yield
 
 
 def _handle_emit(ctrl: "zmq.Socket[bytes]", effect: EEmit) -> Generator[None, Any, None]:
     """Emit an event by sending it to the broker"""
 
+    yield from ()
     ctrl_send(ctrl, *emit.encode(effect.body))
     return
-    yield
 
 
 def _handle_kill(ctrl: "zmq.Socket[bytes]", effect: EKill) -> Generator[None, Any, None]:
+    yield from ()
     ctrl.send_multipart(kill.encode(effect.pid))
     response = ctrl.recv_multipart()
     if response[0] == Cmd.ERROR:
         raise pickle.loads(response[1])
     return
-    yield
 
 
 def make_handlers(

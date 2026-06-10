@@ -109,7 +109,9 @@ def test_fuzz_no_thread_exception_under_random_message_traffic(collect, seed):
     original_hook = threading.excepthook
 
     def _capture(args: threading.ExceptHookArgs) -> None:
-        thread_exceptions.append(args.exc_value)
+        exc_value = args.exc_value
+        if exc_value is not None:
+            thread_exceptions.append(exc_value)
 
     threading.excepthook = _capture
     try:

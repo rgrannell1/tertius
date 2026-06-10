@@ -10,10 +10,12 @@ from orbis import complete
 
 from tertius.constants import Cmd
 from tertius.exceptions import NormalExitError
+from tertius.transport_types import Transport
 from tertius.types import Pid
 from tertius.vm.broker_utils import ctrl_send
 from tertius.vm.messages import crash
 from tertius.vm.process_handlers import make_handlers
+from tertius.vm.transport import make_dealer
 
 
 def _primed_fn(gen: Any, ctrl: "zmq.Socket[bytes]") -> Any:
@@ -72,17 +74,6 @@ def _on_exit(
     ctx.term()
 
 
-def _connect_dealer(
-    ctx: "zmq.Context[zmq.Socket[bytes]]", pid: Pid, addr: str
-) -> "zmq.Socket[bytes]":
-    """Connect a DEALER socket to the given address, using the PID as identity."""
-
-    sock: zmq.Socket[bytes] = ctx.socket(zmq.DEALER)
-    sock.identity = bytes(pid)
-    sock.connect(addr)
-    return sock
-
-
 def process_entry(
     node_id: int,
     pid_int: int,
@@ -91,13 +82,14 @@ def process_entry(
     fn_name: str,
     args: tuple[Any, ...],
     scope: dict[str, Callable[..., Any]],
+    transport: Transport,
 ) -> None:
     """Entry point for each spawned OS process. Must be module-level to be picklable."""
 
     ctx = zmq.Context()
     pid = Pid(node_id=node_id, id=pid_int)
-    dealer = _connect_dealer(ctx, pid, broker_addr)
-    ctrl = _connect_dealer(ctx, pid, ctrl_addr)
+    dealer = make_dealer(ctx, pid, broker_addr, transport)
+    ctrl = make_dealer(ctx, pid, ctrl_addr, transport)
 
     try:
         fn = scope[fn_name]

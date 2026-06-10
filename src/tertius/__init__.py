@@ -21,12 +21,26 @@ from tertius.exceptions import (
     TertiusError,
 )
 from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
+from tertius.transport_types import (
+    CurveClientKeys,
+    CurveSecurity,
+    CurveServerKeys,
+    IpcTransport,
+    TcpTransport,
+    Transport,
+    load_curve_client_keys,
+    load_curve_security,
+    load_curve_server_keys,
+)
 from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
 from tertius.vm import Scope, run
 
 __all__ = [
     "CallMsg",
     "CastMsg",
+    "CurveClientKeys",
+    "CurveSecurity",
+    "CurveServerKeys",
     "DeadProcessError",
     "LinkedCrashError",
     "NormalExitError",
@@ -44,11 +58,17 @@ __all__ = [
     "ESpawn",
     "EWhereis",
     "gen_server",
+    "IpcTransport",
     "Pid",
     "ProcessCrashError",
     "ReplyMsg",
     "Scope",
     "TertiusError",
+    "TcpTransport",
+    "Transport",
+    "load_curve_client_keys",
+    "load_curve_security",
+    "load_curve_server_keys",
     "mcall",
     "mcall_timeout",
     "mcast",

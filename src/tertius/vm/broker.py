@@ -11,6 +11,7 @@ import zmq
 from orbis import complete
 
 from tertius.constants import Cmd
+from tertius.transport_types import Transport
 from tertius.types import Pid, Scope
 from tertius.vm.broker_effects import BrokerCmd, decode_frame
 from tertius.vm.broker_handlers import (
@@ -26,39 +27,13 @@ from tertius.vm.broker_handlers import (
 from tertius.vm.broker_state import BrokerState
 from tertius.vm.broker_utils import reply
 from tertius.vm.messages import frame_id
+from tertius.vm.transport import make_notifier, make_router
 
 
 def _is_shutdown_error(err: zmq.ZMQError) -> bool:
     # ctx.term() causes blocking recv/send to raise ETERM; ENOTSOCK is a fallback
     # if the socket is closed by the time we check. Both mean clean shutdown.
     return err.errno in (zmq.ETERM, zmq.ENOTSOCK)
-
-
-def _make_router(
-    ctx: "zmq.Context[zmq.Socket[bytes]]", addr: str
-) -> "zmq.Socket[bytes]":
-
-    router: zmq.Socket[bytes] = ctx.socket(zmq.ROUTER)
-    router.setsockopt(zmq.LINGER, 0)
-    router.bind(addr)
-
-    return router
-
-
-def _make_notifier(
-    ctx: "zmq.Context[zmq.Socket[bytes]]", broker_addr: str
-) -> "zmq.Socket[bytes]":
-    """The notifier DEALER connects back to the data broker so that crash
-    propagation messages (to monitors and linked processes) flow through
-    the same relay path as normal inter-process messages.
-    """
-
-    notifier: zmq.Socket[bytes] = ctx.socket(zmq.DEALER)
-    notifier.setsockopt(zmq.LINGER, 0)
-    notifier.identity = b"vm-notifier"
-    notifier.connect(broker_addr)
-
-    return notifier
 
 
 def _terminate_procs(state: BrokerState) -> None:
@@ -98,9 +73,12 @@ def make_control_handlers(
     state: BrokerState,
     notifier: "zmq.Socket[bytes]",
     router: "zmq.Socket[bytes]",
+    transport: Transport,
 ) -> ControlHandlers:
     return {
-        "spawn_cmd": partial(handle_spawn, alloc_pid, scope, broker_addr, ctrl_addr, state, router),
+        "spawn_cmd": partial(
+            handle_spawn, alloc_pid, scope, broker_addr, ctrl_addr, state, router, transport
+        ),
         "register_cmd": partial(handle_register, state, router),
         "whereis_cmd": partial(handle_whereis, state, router),
         "link_cmd": partial(handle_link, state, notifier, router),
@@ -167,12 +145,14 @@ class Broker:
         ctx: "zmq.Context[zmq.Socket[bytes]]",
         scope: Scope,
         node_id: int,
+        transport: Transport,
     ) -> None:
         self._broker_addr = broker_addr
         self._ctrl_addr = ctrl_addr
         self._ctx = ctx
         self._scope = scope
         self._node_id = node_id
+        self._transport = transport
         self._next_pid = 0
         self._pid_lock = threading.Lock()
         self._state = BrokerState()
@@ -200,7 +180,7 @@ class Broker:
         frames without inspecting the body.
         """
 
-        router = _make_router(self._ctx, self._broker_addr)
+        router = make_router(self._ctx, self._broker_addr, self._transport)
         self.ready.set()
         try:
             _run_relay_data_loop(router)
@@ -217,15 +197,22 @@ class Broker:
         # Wait until the data broker is bound so the notifier can connect.
         self.ready.wait()
 
-        notifier = _make_notifier(self._ctx, self._broker_addr)
-        router = _make_router(self._ctx, self._ctrl_addr)
+        notifier = make_notifier(self._ctx, self._broker_addr, self._transport)
+        router = make_router(self._ctx, self._ctrl_addr, self._transport)
 
         alloc_pid = self.alloc_pid
         state = self._state
         broker_addr = self._broker_addr
         ctrl_addr = self._ctrl_addr
         handlers = make_control_handlers(
-            alloc_pid, self._scope, broker_addr, ctrl_addr, state, notifier, router
+            alloc_pid,
+            self._scope,
+            broker_addr,
+            ctrl_addr,
+            state,
+            notifier,
+            router,
+            self._transport,
         )
 
         try:
