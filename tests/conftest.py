@@ -12,9 +12,9 @@ def collect():
     """Drain a run() call, returning (return_value, [all_emitted_events])."""
 
     def _collect(
-        fn: Callable[..., Any], *args: Any, scope: dict | None = None
+        fn: Callable[..., Any], *args: Any, scope: dict | None = None, **kwargs: Any
     ) -> tuple[Any, list[Any]]:
-        gen = run(fn, *args, scope=scope)
+        gen = run(fn, *args, scope=scope, **kwargs)
         events: list[Any] = []
         try:
             while True:

@@ -21,6 +21,7 @@ from tertius.types import Pid, Scope
 from tertius.vm.broker_effects import (
     ECrashCmd,
     EEmitCmd,
+    EJoinCmd,
     EKillCmd,
     ELinkCmd,
     EMonitorCmd,
@@ -42,6 +43,7 @@ from tertius.vm.events import (
     name_unbound,
     process_crashed,
     process_exited,
+    process_joined,
     spawn_ready,
     spawn_started,
     spawn_timeout,
@@ -84,6 +86,24 @@ def handle_whereis(
     yield from ()
     pid = state.names.get(effect.name)
     reply(router, effect.requester, *whereis_reply.encode(pid))
+    return
+
+
+def handle_join(
+    state: BrokerState,
+    router: "zmq.Socket[bytes]",
+    effect: EJoinCmd,
+) -> Generator[None, Any, None]:
+    """Acknowledge an externally started process joining the VM.
+
+    Joined processes were not spawned by this broker — the handshake confirms the
+    broker is reachable before the joiner starts sending real traffic.
+    """
+
+    yield from ()
+    pid = Pid.from_bytes(effect.requester)
+    state.emit_queue.put(process_joined(pid))
+    reply(router, effect.requester, Cmd.OK)
     return
 
 

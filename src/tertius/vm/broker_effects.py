@@ -72,6 +72,12 @@ class EKillCmd(Event):
 
 
 @dataclass
+class EJoinCmd(Event):
+    tag: ClassVar[LiteralString] = "join_cmd"
+    requester: bytes
+
+
+@dataclass
 class ECrashCmd(Event):
     tag: ClassVar[LiteralString] = "crash_cmd"
     pid: Pid
@@ -89,6 +95,7 @@ type BrokerCmd = (
     | EEmitCmd
     | EKillCmd
     | ECrashCmd
+    | EJoinCmd
 )
 
 
@@ -118,5 +125,7 @@ def decode_frame(frames: list[bytes]) -> BrokerCmd | None:
             pid = Pid.from_bytes(requester)
             reason = crash.decode(frames)
             return ECrashCmd(pid=pid, reason=reason, requester=requester)
+        case Cmd.JOIN:
+            return EJoinCmd(requester=requester)
         case _:
             return None

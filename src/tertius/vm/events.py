@@ -23,6 +23,10 @@ def spawn_timeout(pid: Pid, fn_name: str, exit_code: int | None) -> Event:
     )
 
 
+def process_joined(pid: Pid) -> Event:
+    return point(dims={"id": [pid_hex(pid)], "tag": ["process:joined"]})
+
+
 def process_exited(pid: Pid) -> Event:
     return point(dims={"id": [pid_hex(pid)], "tag": ["process:exit"]})
 

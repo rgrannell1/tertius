@@ -167,6 +167,17 @@ def _decode_crash(frames: list[bytes]) -> Exception:
 crash: Codec[Exception] = Codec(encode=_encode_crash, decode=_decode_crash)
 
 
+def _encode_join() -> list[bytes]:
+    return [Cmd.JOIN]
+
+
+def _decode_join(_frames: list[bytes]) -> None:
+    return None
+
+
+join: Codec[None] = Codec(encode=_encode_join, decode=_decode_join)
+
+
 # ---------------------------------------------------------------------------
 # Control replies (VM → process)
 # ---------------------------------------------------------------------------

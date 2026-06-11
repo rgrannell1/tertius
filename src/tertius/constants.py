@@ -12,6 +12,7 @@ class Cmd(bytes, Enum):
     WHEREIS = b"whereis"
     MONITOR = b"monitor"
     CRASH = b"crash"
+    JOIN = b"join"
 
     # Process lifecycle signal — sent by a new process once it survives its first step
     READY = b"ready"

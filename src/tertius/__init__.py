@@ -15,6 +15,8 @@ from tertius.effects import (
 )
 from tertius.exceptions import (
     DeadProcessError,
+    JoinRejectedError,
+    JoinTimeoutError,
     LinkedCrashError,
     NormalExitError,
     ProcessCrashError,
@@ -33,7 +35,7 @@ from tertius.transport_types import (
     load_curve_server_keys,
 )
 from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
-from tertius.vm import Scope, run
+from tertius.vm import Scope, join, run
 
 __all__ = [
     "CallMsg",
@@ -42,6 +44,8 @@ __all__ = [
     "CurveSecurity",
     "CurveServerKeys",
     "DeadProcessError",
+    "JoinRejectedError",
+    "JoinTimeoutError",
     "LinkedCrashError",
     "NormalExitError",
     "Envelope",
@@ -59,6 +63,7 @@ __all__ = [
     "EWhereis",
     "gen_server",
     "IpcTransport",
+    "join",
     "Pid",
     "ProcessCrashError",
     "ReplyMsg",

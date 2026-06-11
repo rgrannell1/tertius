@@ -47,6 +47,24 @@ class NormalExitError(TertiusError):
         return (self.__class__, (self.pid,))
 
 
+class JoinTimeoutError(TertiusError):
+    """Raised when a joining process gets no handshake reply from the broker in time."""
+
+    def __init__(self, addr: str, timeout_ms: int) -> None:
+        self.addr = addr
+        self.timeout_ms = timeout_ms
+        super().__init__(f"no broker handshake reply from {addr} within {timeout_ms}ms")
+
+
+class JoinRejectedError(TertiusError):
+    """Raised when the broker replies to a join handshake with a non-OK response."""
+
+    def __init__(self, addr: str, reply: bytes) -> None:
+        self.addr = addr
+        self.reply = reply
+        super().__init__(f"broker at {addr} rejected join handshake: {reply!r}")
+
+
 class DeadProcessError(TertiusError):
     """A process that has exited"""
 

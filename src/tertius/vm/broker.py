@@ -17,6 +17,7 @@ from tertius.vm.broker_effects import BrokerCmd, decode_frame
 from tertius.vm.broker_handlers import (
     handle_crash,
     handle_emit,
+    handle_join,
     handle_kill,
     handle_link,
     handle_monitor,
@@ -80,6 +81,7 @@ def make_control_handlers(
             handle_spawn, alloc_pid, scope, broker_addr, ctrl_addr, state, router, transport
         ),
         "register_cmd": partial(handle_register, state, router),
+        "join_cmd": partial(handle_join, state, router),
         "whereis_cmd": partial(handle_whereis, state, router),
         "link_cmd": partial(handle_link, state, notifier, router),
         "monitor_cmd": partial(handle_monitor, state, notifier, router),
