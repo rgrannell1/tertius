@@ -1,7 +1,7 @@
 """Action generators, executors, and root process for the Tertius VM fuzzer."""
 import contextlib
 import random
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Any
 
 from tertius.effects import (
@@ -58,41 +58,83 @@ def _available_action_types(state: FuzzRunState) -> list[str]:
     return types
 
 
+def make_spawn_action(rng: random.Random, _state: FuzzRunState) -> FuzzAction:
+    return SpawnAction(fn_name=rng.choice(WORKER_FN_NAMES))
+
+
+def make_kill_action(rng: random.Random, state: FuzzRunState) -> FuzzAction:
+    return KillAction(target_idx=rng.randrange(len(state.pid_pool)))
+
+
+def make_send_action(rng: random.Random, state: FuzzRunState) -> FuzzAction:
+    return SendAction(
+        target_idx=rng.randrange(len(state.pid_pool)),
+        body=rng.choice(FUZZ_BODIES),
+    )
+
+
+def make_monitor_action(rng: random.Random, state: FuzzRunState) -> FuzzAction:
+    return MonitorAction(target_idx=rng.randrange(len(state.pid_pool)))
+
+
+def make_link_action(rng: random.Random, state: FuzzRunState) -> FuzzAction:
+    return LinkAction(target_idx=rng.randrange(len(state.pid_pool)))
+
+
+def make_register_action(rng: random.Random, _state: FuzzRunState) -> FuzzAction:
+    return RegisterAction(name=f"fuzz_{rng.randint(0, 19)}")
+
+
+def make_whereis_action(rng: random.Random, _state: FuzzRunState) -> FuzzAction:
+    return WhereisAction(name=f"fuzz_{rng.randint(0, 19)}")
+
+
+def make_emit_action(rng: random.Random, _state: FuzzRunState) -> FuzzAction:
+    return EmitAction(body=rng.choice(FUZZ_BODIES))
+
+
+def make_get_self_action(_rng: random.Random, _state: FuzzRunState) -> FuzzAction:
+    return GetSelfAction()
+
+
+def make_fake_pid_action(rng: random.Random, _state: FuzzRunState) -> FuzzAction:
+    # Fabricate a PID with a plausible node_id but an id that was never allocated.
+    node_id = rng.randint(0, 2**32 - 1)
+    pid_id = rng.randint(10_000, 2**63)
+    return FakePidAction(node_id=node_id, pid_id=pid_id)
+
+
+def make_spawn_linker_action(rng: random.Random, state: FuzzRunState) -> FuzzAction:
+    return SpawnLinkerAction(target_idx=rng.randrange(len(state.pid_pool)))
+
+
+def make_sleep_action(rng: random.Random, _state: FuzzRunState) -> FuzzAction:
+    return SleepAction(ms=rng.randint(10, 80))
+
+
+# Action type name -> parameterized action builder
+ACTION_BUILDERS: dict[str, Callable[[random.Random, FuzzRunState], FuzzAction]] = {
+    "spawn": make_spawn_action,
+    "kill": make_kill_action,
+    "send": make_send_action,
+    "monitor": make_monitor_action,
+    "link": make_link_action,
+    "register": make_register_action,
+    "whereis": make_whereis_action,
+    "emit": make_emit_action,
+    "get_self": make_get_self_action,
+    "fake_pid": make_fake_pid_action,
+    "spawn_linker": make_spawn_linker_action,
+    "sleep": make_sleep_action,
+}
+
+
 def _parameterize_action(rng: random.Random, state: FuzzRunState, action_type: str) -> FuzzAction:
     """Build a concrete FuzzAction from a type name and current state."""
-    match action_type:
-        case "spawn":
-            return SpawnAction(fn_name=rng.choice(WORKER_FN_NAMES))
-        case "kill":
-            return KillAction(target_idx=rng.randrange(len(state.pid_pool)))
-        case "send":
-            return SendAction(
-                target_idx=rng.randrange(len(state.pid_pool)),
-                body=rng.choice(FUZZ_BODIES),
-            )
-        case "monitor":
-            return MonitorAction(target_idx=rng.randrange(len(state.pid_pool)))
-        case "link":
-            return LinkAction(target_idx=rng.randrange(len(state.pid_pool)))
-        case "register":
-            return RegisterAction(name=f"fuzz_{rng.randint(0, 19)}")
-        case "whereis":
-            return WhereisAction(name=f"fuzz_{rng.randint(0, 19)}")
-        case "emit":
-            return EmitAction(body=rng.choice(FUZZ_BODIES))
-        case "get_self":
-            return GetSelfAction()
-        case "fake_pid":
-            # Fabricate a PID with a plausible node_id but an id that was never allocated.
-            node_id = rng.randint(0, 2**32 - 1)
-            pid_id = rng.randint(10_000, 2**63)
-            return FakePidAction(node_id=node_id, pid_id=pid_id)
-        case "spawn_linker":
-            return SpawnLinkerAction(target_idx=rng.randrange(len(state.pid_pool)))
-        case "sleep":
-            return SleepAction(ms=rng.randint(10, 80))
-        case _:
-            raise ValueError(f"unknown action type: {action_type!r}")
+    builder = ACTION_BUILDERS.get(action_type)
+    if builder is None:
+        raise ValueError(f"unknown action type: {action_type!r}")
+    return builder(rng, state)
 
 
 def generate_next_action(rng: random.Random, state: FuzzRunState) -> FuzzAction:
@@ -101,60 +143,60 @@ def generate_next_action(rng: random.Random, state: FuzzRunState) -> FuzzAction:
     return _parameterize_action(rng, state, action_type)
 
 
-def execute_spawn(state: FuzzRunState, fn_name: str) -> Generator[Any, Any, None]:
+def execute_spawn(state: FuzzRunState, action: SpawnAction) -> Generator[Any, Any, None]:
     """Spawn a worker process and record its PID in the pool."""
-    pid: Pid = yield ESpawn(fn_name=fn_name)
+    pid: Pid = yield ESpawn(fn_name=action.fn_name)
     state.pid_pool.append(pid)
     state.spawn_count += 1
 
 
-def execute_kill(state: FuzzRunState, target_idx: int) -> Generator[Any, Any, None]:
+def execute_kill(state: FuzzRunState, action: KillAction) -> Generator[Any, Any, None]:
     """Kill a process; swallows DeadProcessError if it already exited."""
-    target = state.pid_pool[target_idx]
+    target = state.pid_pool[action.target_idx]
     with contextlib.suppress(DeadProcessError):
         yield EKill(pid=target)
 
 
-def execute_send(state: FuzzRunState, target_idx: int, body: Any) -> Generator[Any, Any, None]:
+def execute_send(state: FuzzRunState, action: SendAction) -> Generator[Any, Any, None]:
     """Send a message; silently dropped by the broker if the target is dead."""
-    target = state.pid_pool[target_idx]
-    yield ESend(pid=target, body=body)
+    target = state.pid_pool[action.target_idx]
+    yield ESend(pid=target, body=action.body)
 
 
-def execute_monitor(state: FuzzRunState, target_idx: int) -> Generator[Any, Any, None]:
+def execute_monitor(state: FuzzRunState, action: MonitorAction) -> Generator[Any, Any, None]:
     """Set a one-shot monitor.
 
     retroactive ProcessCrashError delivered as a message if already dead.
     """
-    target = state.pid_pool[target_idx]
+    target = state.pid_pool[action.target_idx]
     yield EMonitor(pid=target)
 
 
-def execute_link(state: FuzzRunState, target_idx: int) -> Generator[Any, Any, None]:
+def execute_link(state: FuzzRunState, action: LinkAction) -> Generator[Any, Any, None]:
     """Bidirectionally link to a process.
 
     retroactive LinkedCrashError queued as a message if already dead.
     """
-    target = state.pid_pool[target_idx]
+    target = state.pid_pool[action.target_idx]
     yield ELink(pid=target)
 
 
-def execute_register(name: str) -> Generator[Any, Any, None]:
+def execute_register(_state: FuzzRunState, action: RegisterAction) -> Generator[Any, Any, None]:
     """Register the root process under a fuzz name."""
-    yield ERegister(name=name)
+    yield ERegister(name=action.name)
 
 
-def execute_whereis(name: str) -> Generator[Any, Any, None]:
+def execute_whereis(_state: FuzzRunState, action: WhereisAction) -> Generator[Any, Any, None]:
     """Look up a fuzz name; result is discarded."""
-    yield EWhereis(name=name)
+    yield EWhereis(name=action.name)
 
 
-def execute_emit(body: Any) -> Generator[Any, Any, None]:
+def execute_emit(_state: FuzzRunState, action: EmitAction) -> Generator[Any, Any, None]:
     """Emit a value to the test host."""
-    yield EEmit(body=body)
+    yield EEmit(body=action.body)
 
 
-def execute_get_self(state: FuzzRunState) -> Generator[Any, Any, None]:
+def execute_get_self(state: FuzzRunState, _action: GetSelfAction) -> Generator[Any, Any, None]:
     """Get root's own PID and add it to the pool.
 
     Enables self-targeting: kill root (zombie), link root (self-link), monitor
@@ -165,63 +207,59 @@ def execute_get_self(state: FuzzRunState) -> Generator[Any, Any, None]:
         state.pid_pool.append(self_pid)
 
 
-def execute_fake_pid(state: FuzzRunState, node_id: int, pid_id: int) -> Generator[Any, Any, None]:
+def execute_fake_pid(state: FuzzRunState, action: FakePidAction) -> Generator[Any, Any, None]:
     """Insert a fabricated PID into the pool without spawning anything.
 
     Exercises ghost-kill (killing a PID with no process and no tombstone),
     dangling-link (linking to a PID that will never crash), and non-existent
     monitor paths.
     """
-    fake = Pid(node_id=node_id, id=pid_id)
+    fake = Pid(node_id=action.node_id, id=action.pid_id)
     state.pid_pool.append(fake)
     return
     yield
 
 
-def execute_spawn_linker(state: FuzzRunState, target_idx: int) -> Generator[Any, Any, None]:
+def execute_spawn_linker(
+    state: FuzzRunState, action: SpawnLinkerAction
+) -> Generator[Any, Any, None]:
     """Spawn a linker_worker targeting a PID from the pool, then record its PID.
 
     Creates worker-to-worker links so crash cascades route through the broker's
     link notification path, not just through root-to-worker links.
     """
-    target = state.pid_pool[target_idx]
+    target = state.pid_pool[action.target_idx]
     pid: Pid = yield ESpawn(fn_name="linker_worker", args=(bytes(target),))
     state.pid_pool.append(pid)
     state.spawn_count += 1
 
 
-def execute_sleep(ms: int) -> Generator[Any, Any, None]:
+def execute_sleep(_state: FuzzRunState, action: SleepAction) -> Generator[Any, Any, None]:
     """Sleep the root process, letting background worker operations advance."""
-    yield ESleep(ms=ms)
+    yield ESleep(ms=action.ms)
+
+
+# Action dataclass -> executor generator taking (state, action)
+ACTION_EXECUTORS: dict[type, Callable[[FuzzRunState, Any], Generator[Any, Any, None]]] = {
+    SpawnAction: execute_spawn,
+    KillAction: execute_kill,
+    SendAction: execute_send,
+    MonitorAction: execute_monitor,
+    LinkAction: execute_link,
+    RegisterAction: execute_register,
+    WhereisAction: execute_whereis,
+    EmitAction: execute_emit,
+    GetSelfAction: execute_get_self,
+    FakePidAction: execute_fake_pid,
+    SpawnLinkerAction: execute_spawn_linker,
+    SleepAction: execute_sleep,
+}
 
 
 def execute_action(state: FuzzRunState, action: FuzzAction) -> Generator[Any, Any, None]:
     """Dispatch a fuzz action to its executor generator."""
-    match action:
-        case SpawnAction(fn_name=fn_name):
-            yield from execute_spawn(state, fn_name)
-        case KillAction(target_idx=idx):
-            yield from execute_kill(state, idx)
-        case SendAction(target_idx=idx, body=body):
-            yield from execute_send(state, idx, body)
-        case MonitorAction(target_idx=idx):
-            yield from execute_monitor(state, idx)
-        case LinkAction(target_idx=idx):
-            yield from execute_link(state, idx)
-        case RegisterAction(name=name):
-            yield from execute_register(name)
-        case WhereisAction(name=name):
-            yield from execute_whereis(name)
-        case EmitAction(body=body):
-            yield from execute_emit(body)
-        case GetSelfAction():
-            yield from execute_get_self(state)
-        case FakePidAction(node_id=node_id, pid_id=pid_id):
-            yield from execute_fake_pid(state, node_id, pid_id)
-        case SpawnLinkerAction(target_idx=idx):
-            yield from execute_spawn_linker(state, idx)
-        case SleepAction(ms=ms):
-            yield from execute_sleep(ms)
+    executor = ACTION_EXECUTORS[type(action)]
+    yield from executor(state, action)
 
 
 def drain_notifications(timeout_ms: int) -> Generator[Any, Any, None]:

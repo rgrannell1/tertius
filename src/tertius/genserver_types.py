@@ -1,5 +1,6 @@
 # Named type aliases for gen_server handler and generator signatures.
 from collections.abc import Callable, Generator
+from dataclasses import dataclass
 from typing import Any
 
 from tertius.effects import EReceive, EReceiveTimeout, ESend
@@ -31,3 +32,13 @@ type McallTimeoutGen = Generator[ESend | EReceiveTimeout, None | Envelope, Any]
 
 # Generator produced by mcast() — fire-and-forget, no reply.
 type McastGen = Generator[ESend, None, None]
+
+
+@dataclass(frozen=True)
+class ServerHandlers[StateT]:
+    """The four gen_server callbacks, bundled for the server loop."""
+
+    init: InitHandler[StateT]
+    handle_cast: CastHandler[StateT] | None
+    handle_call: CallHandler[StateT]
+    handle_info: InfoHandler[StateT] | None

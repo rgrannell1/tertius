@@ -1,14 +1,16 @@
 """Integration tests for VM and broker lifecycle — clean shutdown after completion."""
-import threading
 from collections.abc import Generator
 from typing import Any, cast
 
 import zmq
 
+from tertius.constants import SpawnMode
 from tertius.effects import EEmit, ESelf, ESend, ESleep, ESpawn
+from tertius.transport_types import IpcTransport
 from tertius.types import Pid
 from tertius.vm import run, vm_run
 from tertius.vm.broker import _run_relay_data_loop
+from tertius.vm.runner_types import VmOptions
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -76,26 +78,14 @@ def test_data_loop_exits_cleanly_when_send_raises_context_terminated():
     _run_relay_data_loop(router)
 
 
-def test_no_unhandled_thread_exception_under_high_message_traffic():
+def test_no_unhandled_thread_exception_under_high_message_traffic(thread_exceptions):
     """Proves the data loop doesn't leak ContextTerminated to the thread machinery under load.
 
     Spawns a worker that sends 500 self-messages so the data router is saturated when
     the VM shuts down, making the recv→send race window likely to be hit.
     """
 
-    thread_exceptions: list[BaseException] = []
-    original_hook = threading.excepthook
-
-    def _capture(args: threading.ExceptHookArgs) -> None:
-        exc_value = args.exc_value
-        if exc_value is not None:
-            thread_exceptions.append(exc_value)
-
-    threading.excepthook = _capture
-    try:
-        list(run(root_with_flood, scope=_SCOPE))
-    finally:
-        threading.excepthook = original_hook
+    list(run(root_with_flood, scope=_SCOPE))
 
     zmq_errors = [exc for exc in thread_exceptions if isinstance(exc, zmq.ZMQError)]
     assert not zmq_errors, f"Unhandled ZMQ errors in broker threads: {zmq_errors}"
@@ -108,5 +98,6 @@ def test_broker_context_is_terminated_after_vm_completes():
     # eventually calls ctx.term() while broker threads still have open sockets,
     # causing SIGABRT (reliably seen on Python 3.14 in zahir2).
     # The fix calls broker.stop() before vm_run returns, terminating the context.
-    events = list(vm_run(root_with_background_spawn, (), _SCOPE))
+    options = VmOptions(transport=IpcTransport(), spawn_mode=SpawnMode.PROCESS)
+    events = list(vm_run(root_with_background_spawn, (), _SCOPE, options))
     assert "started" in events

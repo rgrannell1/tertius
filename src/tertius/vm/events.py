@@ -4,12 +4,13 @@ import time
 
 from bookman.events import Event, Message, point, span
 
+from tertius.constants import SpawnMode
 from tertius.types import Pid
 from tertius.vm.broker_utils import pid_hex
 
 
-def spawn_started(pid: Pid) -> Event:
-    return point(dims={"id": [pid_hex(pid)], "tag": ["spawn:started"]})
+def spawn_started(pid: Pid, mode: SpawnMode) -> Event:
+    return point(dims={"id": [pid_hex(pid)], "tag": ["spawn:started"], "mode": [mode.value]})
 
 
 def spawn_ready(pid: Pid, at: float) -> Event:

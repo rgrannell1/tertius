@@ -8,6 +8,9 @@ from tertius.exceptions import ProcessCrashError
 from tertius.genserver import mcast
 from tertius.types import CastMsg, Envelope, Pid
 
+# Watcher processes monitoring the crasher
+NUM_WATCHERS = 2
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -41,7 +44,7 @@ def _root_two_watchers() -> Generator[Any, Any, list[Any]]:
     me: Pid = yield ESelf()
     crasher: Pid = yield ESpawn(fn_name="crash_on_command")
 
-    for _ in range(2):
+    for _ in range(NUM_WATCHERS):
         yield ESpawn(
             fn_name="watch_and_forward",
             args=(bytes(crasher), bytes(me)),
@@ -49,7 +52,7 @@ def _root_two_watchers() -> Generator[Any, Any, list[Any]]:
 
     # Wait until both watchers have registered their monitors before triggering crash
     watching_count = 0
-    while watching_count < 2:
+    while watching_count < NUM_WATCHERS:
         envelope: Envelope = yield EReceive()
         if envelope.body == "watching":
             watching_count += 1
@@ -57,7 +60,7 @@ def _root_two_watchers() -> Generator[Any, Any, list[Any]]:
     yield from mcast(crasher, "go")
 
     results = []
-    for _ in range(2):
+    for _ in range(NUM_WATCHERS):
         envelope = yield EReceive()
         match envelope.body:
             case CastMsg(body=body):
@@ -77,7 +80,7 @@ def test_all_monitors_receive_crash_notification(collect):
     """Proves that every process monitoring a crasher receives a ProcessCrashError."""
 
     results, _ = collect(_root_two_watchers, scope=_SCOPE)
-    assert len(results) == 2
+    assert len(results) == NUM_WATCHERS
     assert all(isinstance(res, ProcessCrashError) for res in results)
 
 

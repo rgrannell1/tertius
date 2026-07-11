@@ -1,22 +1,20 @@
 """All broker command handlers — spawn, register, whereis, link, monitor, emit, kill, crash."""
 
-import multiprocessing
 import pickle
 import time
-from collections.abc import Callable, Generator
-from multiprocessing.process import BaseProcess
+from collections.abc import Generator
+from dataclasses import dataclass
 from typing import Any
 
 import zmq
 
-from tertius.constants import SPAWN_READY_TIMEOUT_MS, Cmd
+from tertius.constants import SPAWN_READY_TIMEOUT_MS, Cmd, SpawnMode
 from tertius.exceptions import (
     DeadProcessError,
     LinkedCrashError,
     NormalExitError,
     ProcessCrashError,
 )
-from tertius.transport_types import Transport
 from tertius.types import Pid, Scope
 from tertius.vm.broker_effects import (
     ECrashCmd,
@@ -31,6 +29,7 @@ from tertius.vm.broker_effects import (
     decode_frame,
 )
 from tertius.vm.broker_state import BrokerState
+from tertius.vm.broker_types import SpawnContext
 from tertius.vm.broker_utils import reply
 from tertius.vm.events import (
     link_delivered,
@@ -54,9 +53,17 @@ from tertius.vm.messages import (
     pid_reply,
     whereis_reply,
 )
-from tertius.vm.process import process_entry
+from tertius.vm.worker import WorkerHandle, make_worker
+from tertius.vm.worker_types import WorkerSpec
 
-_SPAWN_CTX = multiprocessing.get_context("spawn")
+
+@dataclass(frozen=True)
+class CrashFanout:
+    """Who was affected by a crash: unbound names, notified monitors and links."""
+
+    unbound: list[str]
+    watchers: list[Pid]
+    peers: list[Pid]
 
 
 def handle_register(
@@ -226,14 +233,12 @@ def _record_crash(
     notifier: "zmq.Socket[bytes]",
     pid: Pid,
     reason: Exception,
-) -> tuple[list[str], list[Pid], list[Pid]]:
+) -> CrashFanout:
     """Mark a process as dead and propagate the crash to any observers.
 
     The pid is kept in `dead` as a tombstone so that future link/monitor
     requests against it can be answered immediately rather than hanging.
     Registered names are unbound so they can be reclaimed by a replacement process.
-
-    Returns (unbound_names, notified_monitors, notified_links) for the caller to emit.
     """
     state.dead[pid] = reason
 
@@ -244,25 +249,19 @@ def _record_crash(
     watchers = _notify_monitors(state, notifier, pid, reason)
     peers = _notify_links(state, notifier, pid, reason)
 
-    return unbound, watchers, peers
+    return CrashFanout(unbound=unbound, watchers=watchers, peers=peers)
 
 
-def _emit_crash_events(
-    state: BrokerState,
-    pid: Pid,
-    unbound: list[str],
-    watchers: list[Pid],
-    peers: list[Pid],
-) -> None:
+def _emit_crash_events(state: BrokerState, pid: Pid, fanout: CrashFanout) -> None:
     """Emit crash events for a process."""
 
-    for name in unbound:
+    for name in fanout.unbound:
         state.emit_queue.put(name_unbound(pid, name))
 
-    for _watcher in watchers:
+    for _watcher in fanout.watchers:
         state.emit_queue.put(monitor_delivered(pid))
 
-    for _peer in peers:
+    for _peer in fanout.peers:
         state.emit_queue.put(link_delivered(pid))
 
 
@@ -280,19 +279,19 @@ def handle_kill(
         return
 
     # Ack before terminating so the caller isn't blocked waiting on a process
-    # that may take a moment to actually die.
+    # that may take a moment to actually die. Thread workers observe the kill
+    # cooperatively, at their next effect yield or receive poll.
     reply(router, effect.requester, Cmd.OK)
-
-    proc = state.procs.pop(effect.target, None)
-    if proc is not None:
-        proc.terminate()
+    worker = state.procs.pop(effect.target, None)
+    if worker is not None:
+        worker.terminate()
 
     # Treat an external kill as a crash so monitors and links are notified
     # through the same path as a natural process failure.
     killed_reason = RuntimeError("killed")
     state.emit_queue.put(process_crashed(effect.target, killed_reason))
-    unbound, watchers, peers = _record_crash(state, notifier, effect.target, killed_reason)
-    _emit_crash_events(state, effect.target, unbound, watchers, peers)
+    fanout = _record_crash(state, notifier, effect.target, killed_reason)
+    _emit_crash_events(state, effect.target, fanout)
     return
 
 
@@ -312,126 +311,193 @@ def handle_crash(
     else:
         state.emit_queue.put(process_crashed(effect.pid, effect.reason))
 
-    unbound, watchers, peers = _record_crash(state, notifier, effect.pid, effect.reason)
-    _emit_crash_events(state, effect.pid, unbound, watchers, peers)
+    fanout = _record_crash(state, notifier, effect.pid, effect.reason)
+    _emit_crash_events(state, effect.pid, fanout)
     reply(router, effect.requester, Cmd.OK)
     return
 
 
-def _start_process(
-    pid: Pid,
-    fn_name: str,
-    args: tuple[Any, ...],
-    broker_addr: str,
-    ctrl_addr: str,
-    scope: Scope,
-    state: BrokerState,
-    transport: Transport,
-) -> BaseProcess:
-    """Start a new process."""
-
-    # Daemon=True so child processes don't outlive the broker if it exits uncleanly.
-    # spawn (not fork) avoids inheriting the parent's ZMQ IO threads, which
-    # causes libzmq to abort() when the child later calls zmq_msg_recv.
-    proc = _SPAWN_CTX.Process(
-        target=process_entry,
-        args=(pid.node_id, pid.id, broker_addr, ctrl_addr, fn_name, args, scope, transport),
-        daemon=True,
-    )
-    proc.start()
-    state.procs[pid] = proc
-    return proc
-
-
-def await_ready_gen(
-    router: "zmq.Socket[bytes]",
-    proc: BaseProcess,
-    new_pid: Pid,
-    fn_name: str,
-    pending_readies: dict[bytes, None],
-) -> Generator[Any, Any, None]:
-    """Wait for the spawned process to send READY, dispatching other commands that arrive meanwhile.
-
-    A nested spawn handler may consume and stash our READY while waiting for its own; we check
-    pending_readies at each iteration so we don't miss it. RCVTIMEO is saved and restored so
-    nested calls don't accidentally disable the outer timeout.
-    """
-
-    pid_bytes = bytes(new_pid)
-    prev_timeout = router.getsockopt(zmq.RCVTIMEO)
-    router.setsockopt(zmq.RCVTIMEO, SPAWN_READY_TIMEOUT_MS)
-    try:
-        while True:
-            # A nested await_ready_gen may have consumed our READY and stashed it.
-            if pid_bytes in pending_readies:
-                del pending_readies[pid_bytes]
-                reply(router, pid_bytes, Cmd.OK)
-                return
-
-            try:
-                frames = router.recv_multipart()
-            except zmq.Again:
-                if not proc.is_alive():
-                    raise RuntimeError(
-                        f"ESpawn: process {fn_name!r} died before sending READY "
-                        f"(exit code {proc.exitcode})"
-                    ) from None
-                continue
-
-            child_requester, child_command = frames[0], frames[1]
-
-            if child_command == Cmd.READY and child_requester == pid_bytes:
-                reply(router, child_requester, Cmd.OK)
-                return
-
-            if child_command == Cmd.READY:
-                # READY for a different PID — stash it for that process's await_ready_gen.
-                pending_readies[child_requester] = None
-                continue
-
-            effect = decode_frame(frames)
-            if effect is not None:
-                yield effect
-    finally:
-        router.setsockopt(zmq.RCVTIMEO, prev_timeout)
-
-
-def handle_spawn(
-    alloc_pid: Callable[[], Pid],
-    scope: Scope,
-    broker_addr: str,
-    ctrl_addr: str,
-    state: BrokerState,
-    router: "zmq.Socket[bytes]",
-    transport: Transport,
-    effect: ESpawnCmd,
-) -> Generator[Any, Any, None]:
-    """Spawn a new process."""
-
-    yield from ()
-    fn_name = effect.fn_name
-    args = effect.args
+def check_in_scope(scope: Scope, fn_name: str) -> None:
+    """Reject spawns of functions the VM does not know."""
 
     if fn_name not in scope:
         raise KeyError(f"ESpawn: {fn_name!r} not in scope; available: {sorted(scope)}")
 
-    new_pid = alloc_pid()
-    spawn_start = time.time()
-    proc = _start_process(
-        new_pid, fn_name, args, broker_addr, ctrl_addr, scope, state, transport
+
+def start_worker(
+    spawn_ctx: SpawnContext,
+    mode: SpawnMode,
+    pid: Pid,
+    effect: ESpawnCmd,
+) -> tuple[WorkerHandle, WorkerSpec]:
+    """Build the worker spec and start a worker for it in the requested mode."""
+
+    spec = WorkerSpec(
+        pid=pid,
+        fn_name=effect.fn_name,
+        args=effect.args,
+        scope=spawn_ctx.scope,
+        broker_addr=spawn_ctx.broker_addr,
+        ctrl_addr=spawn_ctx.ctrl_addr,
+        transport=spawn_ctx.transport,
     )
-    state.emit_queue.put(spawn_started(new_pid))
+    worker = make_worker(mode, spec)
+    worker.start()
+    return worker, spec
+
+
+def claim_pending_ready(
+    router: "zmq.Socket[bytes]",
+    pid_bytes: bytes,
+    pending_readies: dict[bytes, None],
+) -> bool:
+    """Claim a READY that a nested await_ready_gen consumed and stashed for us."""
+
+    if pid_bytes not in pending_readies:
+        return False
+
+    del pending_readies[pid_bytes]
+    reply(router, pid_bytes, Cmd.OK)
+    return True
+
+
+def check_worker_alive(worker: WorkerHandle, fn_name: str) -> None:
+    """Raise if the worker died before sending READY."""
+
+    if worker.is_alive():
+        return
+
+    raise RuntimeError(
+        f"ESpawn: process {fn_name!r} died before sending READY "
+        f"(exit code {worker.exit_status()})"
+    )
+
+
+def recv_ready_frames(
+    router: "zmq.Socket[bytes]",
+    worker: WorkerHandle,
+    fn_name: str,
+) -> list[bytes] | None:
+    """Receive control frames, checking worker liveness on each recv timeout."""
 
     try:
-        # Block until the process is ready before replying to the caller, so the
-        # caller can safely send to the new pid immediately after receiving its pid back.
-        yield from await_ready_gen(router, proc, new_pid, fn_name, state.pending_readies)
+        return router.recv_multipart()
+    except zmq.Again:
+        check_worker_alive(worker, fn_name)
+        return None
+
+
+def decode_effects(frames: list[bytes]) -> Generator[Any, Any, None]:
+    """Yield the decoded broker command, or nothing for unknown frames."""
+
+    effect = decode_frame(frames)
+    if effect is not None:
+        yield effect
+
+
+def stash_or_ack_ready(
+    router: "zmq.Socket[bytes]",
+    requester: bytes,
+    pid_bytes: bytes,
+    pending_readies: dict[bytes, None],
+) -> bool:
+    """Ack a READY for our pid; stash READYs belonging to other pending spawns."""
+
+    if requester == pid_bytes:
+        reply(router, requester, Cmd.OK)
+        return True
+
+    pending_readies[requester] = None
+    return False
+
+
+def ready_wait_loop(
+    router: "zmq.Socket[bytes]",
+    worker: WorkerHandle,
+    spec: WorkerSpec,
+    pending_readies: dict[bytes, None],
+) -> Generator[Any, Any, None]:
+    """Wait for the worker's READY, dispatching other commands that arrive meanwhile.
+
+    A nested spawn handler may consume and stash our READY while waiting for its own;
+    we check pending_readies at each iteration so we don't miss it.
+    """
+
+    pid_bytes = bytes(spec.pid)
+    while True:
+        if claim_pending_ready(router, pid_bytes, pending_readies):
+            return
+
+        frames = recv_ready_frames(router, worker, spec.fn_name)
+        if frames is None:
+            continue
+
+        if frames[1] != Cmd.READY:
+            yield from decode_effects(frames)
+            continue
+
+        if stash_or_ack_ready(router, frames[0], pid_bytes, pending_readies):
+            return
+
+
+def await_ready_gen(
+    router: "zmq.Socket[bytes]",
+    worker: WorkerHandle,
+    spec: WorkerSpec,
+    pending_readies: dict[bytes, None],
+) -> Generator[Any, Any, None]:
+    """Bound the READY wait with a recv timeout, restoring the previous timeout after.
+
+    RCVTIMEO is saved and restored so nested calls don't accidentally disable the
+    outer timeout.
+    """
+
+    prev_timeout = router.getsockopt(zmq.RCVTIMEO)
+    router.setsockopt(zmq.RCVTIMEO, SPAWN_READY_TIMEOUT_MS)
+    try:
+        yield from ready_wait_loop(router, worker, spec, pending_readies)
+    finally:
+        router.setsockopt(zmq.RCVTIMEO, prev_timeout)
+
+
+def await_ready_or_timeout(
+    router: "zmq.Socket[bytes]",
+    worker: WorkerHandle,
+    spec: WorkerSpec,
+    state: BrokerState,
+) -> Generator[Any, Any, None]:
+    """Wait for READY, emitting a spawn_timeout event if the worker never sends it."""
+
+    try:
+        yield from await_ready_gen(router, worker, spec, state.pending_readies)
     except (RuntimeError, zmq.ZMQError):
         # ZMQError covers broker shutdown racing with await_ready_gen — still emit
         # the timeout event so the telemetry stream is always closed.
-        state.emit_queue.put(spawn_timeout(new_pid, fn_name, proc.exitcode))
+        state.emit_queue.put(spawn_timeout(spec.pid, spec.fn_name, worker.exit_status()))
         raise
+
+
+def handle_spawn(
+    spawn_ctx: SpawnContext,
+    state: BrokerState,
+    router: "zmq.Socket[bytes]",
+    effect: ESpawnCmd,
+) -> Generator[Any, Any, None]:
+    """Spawn a new worker in the requested (or VM default) mode."""
+
+    yield from ()
+    check_in_scope(spawn_ctx.scope, effect.fn_name)
+
+    mode = effect.mode or spawn_ctx.default_mode
+    new_pid = spawn_ctx.alloc_pid()
+    spawn_start = time.time()
+    worker, spec = start_worker(spawn_ctx, mode, new_pid, effect)
+    state.procs[new_pid] = worker
+    state.emit_queue.put(spawn_started(new_pid, mode))
+
+    # Block until the worker is ready before replying to the caller, so the
+    # caller can safely send to the new pid immediately after receiving its pid back.
+    yield from await_ready_or_timeout(router, worker, spec, state)
 
     state.emit_queue.put(spawn_ready(new_pid, spawn_start))
     reply(router, effect.requester, *pid_reply.encode(new_pid))
-    return

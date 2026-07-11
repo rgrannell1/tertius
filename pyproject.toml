@@ -36,7 +36,14 @@ timeout = 30
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "UP", "B", "C4", "BLE", "SIM", "RUF"]
+select = ["E", "F", "I", "N", "UP", "B", "C4", "BLE", "SIM", "RUF", "PLR", "PLC", "C"]
 
 [tool.mypy]
 strict = true
+
+[tool.ruff.lint.pylint]
+max-statements = 14
+max-args = 4
+
+[tool.ruff.lint.mccabe]
+max-complexity = 7

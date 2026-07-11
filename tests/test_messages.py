@@ -2,7 +2,7 @@
 from hypothesis import given
 from hypothesis import strategies as st
 
-from tertius.constants import Cmd
+from tertius.constants import Cmd, SpawnMode
 from tertius.types import Pid
 from tertius.vm.messages import (
     crash,
@@ -68,7 +68,7 @@ def test_frame_accessors_decompose_correctly(pid, fn_name, args):
     frame_id, frame_command, and frame_payload work together.
     """
 
-    frames = router_wrap(spawn.encode(fn_name, args), identity=bytes(pid))
+    frames = router_wrap(spawn.encode(fn_name, args, None), identity=bytes(pid))
     assert frame_id(frames) == bytes(pid)
     assert frame_command(frames) == Cmd.SPAWN
     assert frame_payload(frames) == frames[2:]
@@ -79,14 +79,15 @@ def test_frame_accessors_decompose_correctly(pid, fn_name, args):
 # ---------------------------------------------------------------------------
 
 
-@given(fn_names, simple_args)
-def test_spawn_roundtrips(fn_name, args):
-    """Proves that encode_spawn / decode_spawn roundtrip preserves fn_name and args."""
+@given(fn_names, simple_args, st.sampled_from([None, *SpawnMode]))
+def test_spawn_roundtrips(fn_name, args, mode):
+    """Proves that encode_spawn / decode_spawn roundtrip preserves fn_name, args, and mode."""
 
-    frames = router_wrap(spawn.encode(fn_name, args))
-    decoded_name, decoded_args = spawn.decode(frames)
+    frames = router_wrap(spawn.encode(fn_name, args, mode))
+    decoded_name, decoded_args, decoded_mode = spawn.decode(frames)
     assert decoded_name == fn_name
     assert decoded_args == args
+    assert decoded_mode == mode
 
 
 @given(names)

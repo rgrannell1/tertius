@@ -88,6 +88,38 @@ def notify_exit(pid: Pid, ctrl: "zmq.Socket[bytes]", err: Exception | None) -> N
         return
 
 
+def set_recv_timeouts(
+    dealer: "zmq.Socket[bytes]",
+    ctrl: "zmq.Socket[bytes]",
+    recv_timeout_ms: int | None,
+) -> None:
+    """Bound every receive on both sockets, or block forever when unset."""
+
+    timeout = recv_timeout_ms if recv_timeout_ms is not None else _BLOCK_FOREVER
+    ctrl.setsockopt(zmq.RCVTIMEO, timeout)
+    dealer.setsockopt(zmq.RCVTIMEO, timeout)
+
+
+def run_joined_gen(
+    pid: Pid,
+    dealer: "zmq.Socket[bytes]",
+    ctrl: "zmq.Socket[bytes]",
+    gen: Any,
+) -> Any:
+    """Run the joined generator, reporting its exit or crash to the broker."""
+
+    try:
+        result = complete(gen, **make_handlers(pid, dealer, ctrl, None))
+    except Exception as err:
+        ctrl.setsockopt(zmq.RCVTIMEO, _BLOCK_FOREVER)
+        notify_exit(pid, ctrl, err)
+        raise
+
+    ctrl.setsockopt(zmq.RCVTIMEO, _BLOCK_FOREVER)
+    notify_exit(pid, ctrl, None)
+    return result
+
+
 def join(
     fn: Callable[..., Any],
     *args: Any,
@@ -111,21 +143,8 @@ def join(
 
     try:
         shake_hands(ctrl, ctrl_addr, handshake_timeout_ms)
-
-        timeout = recv_timeout_ms if recv_timeout_ms is not None else _BLOCK_FOREVER
-        ctrl.setsockopt(zmq.RCVTIMEO, timeout)
-        dealer.setsockopt(zmq.RCVTIMEO, timeout)
-
-        try:
-            result = complete(fn(*args), **make_handlers(pid, dealer, ctrl))
-        except Exception as err:
-            ctrl.setsockopt(zmq.RCVTIMEO, _BLOCK_FOREVER)
-            notify_exit(pid, ctrl, err)
-            raise
-
-        ctrl.setsockopt(zmq.RCVTIMEO, _BLOCK_FOREVER)
-        notify_exit(pid, ctrl, None)
-        return result
+        set_recv_timeouts(dealer, ctrl, recv_timeout_ms)
+        return run_joined_gen(pid, dealer, ctrl, fn(*args))
     finally:
         dealer.close()
         ctrl.close()

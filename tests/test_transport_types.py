@@ -4,6 +4,7 @@ from pathlib import Path
 
 from tertius import (
     CurveClientKeys,
+    CurveKeyPaths,
     CurveSecurity,
     CurveServerKeys,
     load_curve_client_keys,
@@ -70,11 +71,13 @@ def test_load_curve_security_builds_broker_and_process_keys(tmp_path):
     write_key(server_public_key_path, b"server-public")
 
     security = load_curve_security(
-        broker_public_key_path,
-        broker_secret_key_path,
-        process_public_key_path,
-        process_secret_key_path,
-        server_public_key_path,
+        CurveKeyPaths(
+            broker_public_key=broker_public_key_path,
+            broker_secret_key=broker_secret_key_path,
+            process_public_key=process_public_key_path,
+            process_secret_key=process_secret_key_path,
+            server_public_key=server_public_key_path,
+        )
     )
 
     assert security == CurveSecurity(

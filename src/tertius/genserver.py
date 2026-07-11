@@ -1,4 +1,5 @@
 # GenServer abstraction — builds stateful process loops from generator handler functions.
+from collections.abc import Generator
 from functools import partial
 from itertools import count
 from typing import Any
@@ -14,38 +15,49 @@ from tertius.genserver_types import (
     McastGen,
     ServerFactory,
     ServerGen,
+    ServerHandlers,
 )
 from tertius.types import CallMsg, CastMsg, Envelope, Pid, ReplyMsg
 
 _ref_counter = count()
 
 
+def dispatch_msg[StateT](
+    handlers: ServerHandlers[StateT],
+    state: StateT,
+    envelope: Envelope,
+) -> Generator[Any, Any, StateT]:
+    """Route one envelope to the matching handler, returning the updated state."""
+
+    match envelope.body:
+        case CastMsg(body=body):
+            if handlers.handle_cast is None:
+                return state
+            return (yield from handlers.handle_cast(state, body))
+
+        case CallMsg(ref=ref, body=body):
+            state, reply = yield from handlers.handle_call(state, body)
+            yield ESend(envelope.sender, ReplyMsg(ref=ref, body=reply))
+            return state
+
+        case _:
+            if handlers.handle_info is None:
+                return state
+            return (yield from handlers.handle_info(state, envelope.body))
+
+
 def _gen_server_loop[StateT](
-    init: InitHandler[StateT],
-    handle_cast: CastHandler[StateT] | None,
-    handle_call: CallHandler[StateT],
-    handle_info: InfoHandler[StateT] | None,
+    handlers: ServerHandlers[StateT],
     *args: Any,
 ) -> ServerGen:
-    state = yield from init(*args)
+    state = yield from handlers.init(*args)
 
     while True:
         envelope = yield EReceive()
         if envelope is None:
             raise RuntimeError("EReceive yielded None — broker sent no envelope")
 
-        match envelope.body:
-            case CastMsg(body=body):
-                if handle_cast is not None:
-                    state = yield from handle_cast(state, body)
-
-            case CallMsg(ref=ref, body=body):
-                state, reply = yield from handle_call(state, body)
-                yield ESend(envelope.sender, ReplyMsg(ref=ref, body=reply))
-
-            case _:
-                if handle_info is not None:
-                    state = yield from handle_info(state, envelope.body)
+        state = yield from dispatch_msg(handlers, state, envelope)
 
 
 def gen_server[StateT](
@@ -61,7 +73,10 @@ def gen_server[StateT](
     suitable for running inside a tertius process.
     """
 
-    return partial(_gen_server_loop, init, handle_cast, handle_call, handle_info)
+    handlers = ServerHandlers(
+        init=init, handle_cast=handle_cast, handle_call=handle_call, handle_info=handle_info
+    )
+    return partial(_gen_server_loop, handlers)
 
 
 def mcall(pid: Pid, body: Any) -> McallGen:

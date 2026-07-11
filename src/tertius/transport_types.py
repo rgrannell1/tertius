@@ -30,6 +30,17 @@ class CurveSecurity:
 
 
 @dataclass(frozen=True)
+class CurveKeyPaths:
+    """Filesystem locations of the CURVE key files for one VM."""
+
+    broker_public_key: str | Path
+    broker_secret_key: str | Path
+    process_public_key: str | Path
+    process_secret_key: str | Path
+    server_public_key: str | Path
+
+
+@dataclass(frozen=True)
 class IpcTransport:
     """Local IPC transport matching the historical Tertius default."""
 
@@ -82,20 +93,14 @@ def load_curve_client_keys(
     )
 
 
-def load_curve_security(
-    broker_public_key_path: str | Path,
-    broker_secret_key_path: str | Path,
-    process_public_key_path: str | Path,
-    process_secret_key_path: str | Path,
-    server_public_key_path: str | Path,
-) -> CurveSecurity:
+def load_curve_security(paths: CurveKeyPaths) -> CurveSecurity:
     """Load the broker and process CURVE keys for a TCP transport."""
 
     return CurveSecurity(
-        broker=load_curve_server_keys(broker_public_key_path, broker_secret_key_path),
+        broker=load_curve_server_keys(paths.broker_public_key, paths.broker_secret_key),
         process=load_curve_client_keys(
-            process_public_key_path,
-            process_secret_key_path,
-            server_public_key_path,
+            paths.process_public_key,
+            paths.process_secret_key,
+            paths.server_public_key,
         ),
     )

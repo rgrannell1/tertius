@@ -2,10 +2,10 @@
 
 import queue
 from dataclasses import dataclass, field
-from multiprocessing.process import BaseProcess
 from typing import Any
 
 from tertius.types import Pid
+from tertius.vm.worker import WorkerHandle
 
 
 @dataclass
@@ -24,8 +24,8 @@ class BrokerState:
     # tombstone: pid -> crash reason
     dead: dict[Pid, Exception] = field(default_factory=dict)
 
-    # live OS processes (BaseProcess covers both fork and spawn context processes)
-    procs: dict[Pid, BaseProcess] = field(default_factory=dict)
+    # live workers, keyed by pid — process- or thread-backed
+    procs: dict[Pid, WorkerHandle] = field(default_factory=dict)
 
     # outbound events for the host
     emit_queue: queue.Queue[Any] = field(default_factory=queue.Queue)

@@ -11,8 +11,7 @@ import zmq
 from orbis import complete
 
 from tertius.constants import Cmd
-from tertius.transport_types import Transport
-from tertius.types import Pid, Scope
+from tertius.types import Pid
 from tertius.vm.broker_effects import BrokerCmd, decode_frame
 from tertius.vm.broker_handlers import (
     handle_crash,
@@ -26,6 +25,7 @@ from tertius.vm.broker_handlers import (
     handle_whereis,
 )
 from tertius.vm.broker_state import BrokerState
+from tertius.vm.broker_types import BrokerConfig, SpawnContext
 from tertius.vm.broker_utils import reply
 from tertius.vm.messages import frame_id
 from tertius.vm.transport import make_notifier, make_router
@@ -38,7 +38,7 @@ def _is_shutdown_error(err: zmq.ZMQError) -> bool:
 
 
 def _terminate_procs(state: BrokerState) -> None:
-    """Terminate all spawned processes."""
+    """Terminate all spawned workers. Thread workers stop at their next effect yield."""
 
     for proc in state.procs.values():
         if proc.is_alive():
@@ -67,19 +67,13 @@ type ControlHandlers = dict[str, Any]
 
 
 def make_control_handlers(
-    alloc_pid: Any,
-    scope: Scope,
-    broker_addr: str,
-    ctrl_addr: str,
+    spawn_ctx: SpawnContext,
     state: BrokerState,
     notifier: "zmq.Socket[bytes]",
     router: "zmq.Socket[bytes]",
-    transport: Transport,
 ) -> ControlHandlers:
     return {
-        "spawn_cmd": partial(
-            handle_spawn, alloc_pid, scope, broker_addr, ctrl_addr, state, router, transport
-        ),
+        "spawn_cmd": partial(handle_spawn, spawn_ctx, state, router),
         "register_cmd": partial(handle_register, state, router),
         "join_cmd": partial(handle_join, state, router),
         "whereis_cmd": partial(handle_whereis, state, router),
@@ -91,6 +85,51 @@ def make_control_handlers(
     }
 
 
+def recv_control_frames(router: "zmq.Socket[bytes]") -> list[bytes] | None:
+    """Receive control frames; None means the broker is shutting down."""
+
+    try:
+        return router.recv_multipart()
+    except zmq.ZMQError as err:
+        if _is_shutdown_error(err):
+            return None
+        raise
+
+
+def reply_error(router: "zmq.Socket[bytes]", requester: bytes, err: Exception) -> bool:
+    """Send the handler's exception back to the caller rather than crashing the
+    broker — one bad request shouldn't take down the VM. False on shutdown."""
+
+    try:
+        reply(router, requester, Cmd.ERROR, pickle.dumps(err))
+        return True
+    except zmq.ZMQError as zmq_err:
+        if _is_shutdown_error(zmq_err):
+            return False
+        raise
+
+
+def dispatch_frames(
+    router: "zmq.Socket[bytes]", frames: list[bytes]
+) -> Generator[BrokerCmd, Any, bool]:
+    """Yield the decoded command effect for orbis to dispatch; False means shut down."""
+
+    effect = decode_frame(frames)
+    if effect is None:
+        return True
+
+    try:
+        yield effect
+    except zmq.ZMQError as err:
+        if _is_shutdown_error(err):
+            return False
+        raise
+    except Exception as err:  # noqa: BLE001
+        return reply_error(router, frame_id(frames), err)
+
+    return True
+
+
 def broker_control_gen(router: "zmq.Socket[bytes]") -> Generator[BrokerCmd, Any, None]:
     """Drive the broker control loop as a generator.
 
@@ -98,34 +137,13 @@ def broker_control_gen(router: "zmq.Socket[bytes]") -> Generator[BrokerCmd, Any,
     """
 
     while True:
-        try:
-            frames = router.recv_multipart()
-        except zmq.ZMQError as err:
-            if _is_shutdown_error(err):
-                return
-            raise
+        frames = recv_control_frames(router)
+        if frames is None:
+            return
 
-        requester = frame_id(frames)
-        effect = decode_frame(frames)
-
-        if effect is None:
-            continue
-
-        try:
-            yield effect
-        except zmq.ZMQError as err:
-            if _is_shutdown_error(err):
-                return
-            raise
-        except Exception as err:  # noqa: BLE001
-            # Send the exception back to the caller rather than crashing
-            # the broker — one bad request shouldn't take down the VM.
-            try:
-                reply(router, requester, Cmd.ERROR, pickle.dumps(err))
-            except zmq.ZMQError as zmq_err:
-                if _is_shutdown_error(zmq_err):
-                    return
-                raise
+        alive = yield from dispatch_frames(router, frames)
+        if not alive:
+            return
 
 
 class Broker:
@@ -140,21 +158,9 @@ class Broker:
       here — process registry, links, monitors, the dead-process tombstones.
     """
 
-    def __init__(
-        self,
-        broker_addr: str,
-        ctrl_addr: str,
-        ctx: "zmq.Context[zmq.Socket[bytes]]",
-        scope: Scope,
-        node_id: int,
-        transport: Transport,
-    ) -> None:
-        self._broker_addr = broker_addr
-        self._ctrl_addr = ctrl_addr
+    def __init__(self, config: BrokerConfig, ctx: "zmq.Context[zmq.Socket[bytes]]") -> None:
+        self.config = config
         self._ctx = ctx
-        self._scope = scope
-        self._node_id = node_id
-        self._transport = transport
         self._next_pid = 0
         self._pid_lock = threading.Lock()
         self._state = BrokerState()
@@ -170,10 +176,22 @@ class Broker:
         """Allocate a new PID for a new process."""
 
         with self._pid_lock:
-            pid = Pid(node_id=self._node_id, id=self._next_pid)
+            pid = Pid(node_id=self.config.node_id, id=self._next_pid)
             self._next_pid += 1
 
             return pid
+
+    def make_spawn_context(self) -> SpawnContext:
+        """Bundle the spawn handler's configuration."""
+
+        return SpawnContext(
+            alloc_pid=self.alloc_pid,
+            scope=self.config.scope,
+            broker_addr=self.config.broker_addr,
+            ctrl_addr=self.config.ctrl_addr,
+            transport=self.config.transport,
+            default_mode=self.config.spawn_mode,
+        )
 
     def relay_data(self) -> None:
         """Blind message relay between processes.
@@ -182,7 +200,7 @@ class Broker:
         frames without inspecting the body.
         """
 
-        router = make_router(self._ctx, self._broker_addr, self._transport)
+        router = make_router(self._ctx, self.config.broker_addr, self.config.transport)
         self.ready.set()
         try:
             _run_relay_data_loop(router)
@@ -192,30 +210,16 @@ class Broker:
     def run_vm_control(self) -> None:
         """Serialised handler loop for all VM control operations.
 
-        Single-threaded by design: all mutable VM state (_names, _links,
-        _monitors, _dead, _procs) is touched exclusively here, so no locking
+        Single-threaded by design: all mutable VM state (names, links,
+        monitors, dead, procs) is touched exclusively here, so no locking
         is needed beyond alloc_pid.
         """
         # Wait until the data broker is bound so the notifier can connect.
         self.ready.wait()
 
-        notifier = make_notifier(self._ctx, self._broker_addr, self._transport)
-        router = make_router(self._ctx, self._ctrl_addr, self._transport)
-
-        alloc_pid = self.alloc_pid
-        state = self._state
-        broker_addr = self._broker_addr
-        ctrl_addr = self._ctrl_addr
-        handlers = make_control_handlers(
-            alloc_pid,
-            self._scope,
-            broker_addr,
-            ctrl_addr,
-            state,
-            notifier,
-            router,
-            self._transport,
-        )
+        notifier = make_notifier(self._ctx, self.config.broker_addr, self.config.transport)
+        router = make_router(self._ctx, self.config.ctrl_addr, self.config.transport)
+        handlers = make_control_handlers(self.make_spawn_context(), self._state, notifier, router)
 
         try:
             complete(broker_control_gen(router), **handlers)
@@ -224,7 +228,7 @@ class Broker:
             notifier.close()
 
     def stop(self) -> None:
-        """Terminate all spawned processes then shut down the broker context.
+        """Terminate all spawned workers then shut down the broker context.
 
         Child processes are terminated before ctx.term() so they don't hold
         IPC connections open while the sockets are being torn down.

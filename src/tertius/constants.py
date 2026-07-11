@@ -1,5 +1,5 @@
 """Project-wide constants."""
-from enum import Enum
+from enum import Enum, StrEnum
 
 
 class Cmd(bytes, Enum):
@@ -22,5 +22,18 @@ class Cmd(bytes, Enum):
     ERROR = b"error"
 
 
+class SpawnMode(StrEnum):
+    """Backend a spawned actor runs on — an OS process or a thread in the VM process."""
+
+    PROCESS = "process"
+    THREAD = "thread"
+
+
 # Milliseconds to wait for a spawned process to signal readiness
 SPAWN_READY_TIMEOUT_MS = 1000
+
+# Seconds a cooperatively killed thread worker may linger before the watchdog logs it
+KILL_LINGER_GRACE_SECONDS = 1.0
+
+# How often a blocked thread-worker receive wakes to check its kill event
+RECEIVE_POLL_INTERVAL_MS = 100

@@ -1,6 +1,5 @@
 """Fuzz tests for the Tertius VM — asserts no combination of process operations crashes the VM."""
 import contextlib
-import threading
 from collections import defaultdict
 from functools import partial
 from typing import Any
@@ -98,27 +97,15 @@ def _assert_telemetry_invariants(events: list[Any]) -> None:
 
 
 @pytest.mark.parametrize("seed", range(NUM_SEEDS))
-def test_fuzz_no_thread_exception_under_random_message_traffic(collect, seed):
+def test_fuzz_no_thread_exception_under_random_message_traffic(collect, thread_exceptions, seed):
     """No ZMQ error must escape to the thread machinery under any random workload.
 
     message_flood_worker saturates the data router so the send_multipart race
     fires whenever ctx.term() overlaps with an in-flight forward.
     Before the fix this catches ContextTerminated escaping from _run_data_loop.
     """
-    thread_exceptions: list[BaseException] = []
-    original_hook = threading.excepthook
-
-    def _capture(args: threading.ExceptHookArgs) -> None:
-        exc_value = args.exc_value
-        if exc_value is not None:
-            thread_exceptions.append(exc_value)
-
-    threading.excepthook = _capture
-    try:
-        with contextlib.suppress(LinkedCrashError):
-            collect(partial(fuzz_root, seed, SEQUENCE_LENGTH), scope=WORKER_SCOPE)
-    finally:
-        threading.excepthook = original_hook
+    with contextlib.suppress(LinkedCrashError):
+        collect(partial(fuzz_root, seed, SEQUENCE_LENGTH), scope=WORKER_SCOPE)
 
     zmq_errors = [exc for exc in thread_exceptions if isinstance(exc, zmq.ZMQError)]
     if zmq_errors:

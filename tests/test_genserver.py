@@ -68,6 +68,15 @@ counter = gen_server(init=_init, handle_cast=_cast, handle_call=_call)
 
 SENDER = Pid(node_id=0, id=99)
 
+# Counter start value for idempotence checks
+INITIAL_COUNT = 3
+
+# Receives needed when the first reply carries a non-matching ref
+EXPECTED_RECEIVES = 2
+
+# Successive calls made when checking ref uniqueness
+NUM_CALLS = 3
+
 
 def _pop_inbox(inbox: list, effect: EReceive) -> Envelope:
     return inbox.pop(0)
@@ -185,13 +194,13 @@ def test_state_unchanged_after_call():
 
     sent = drive(
         counter,
-        3,
+        INITIAL_COUNT,
         [
             CallMsg(ref=0, body="get"),
             CallMsg(ref=1, body="get"),
         ],
     )
-    assert sent[0].body == sent[1].body == 3
+    assert sent[0].body == sent[1].body == INITIAL_COUNT
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +320,7 @@ def test_call_helper_ignores_non_matching_replies():
         receive=stub_receive,
     )
     assert result == "right"
-    assert call_count == 2
+    assert call_count == EXPECTED_RECEIVES
 
 
 def test_call_refs_are_unique():
@@ -325,10 +334,10 @@ def test_call_refs_are_unique():
     def stub_receive(effect: EReceive) -> Envelope:
         return Envelope(sender=SENDER, body=ReplyMsg(ref=refs[-1], body=None))
 
-    for _ in range(3):
+    for _ in range(NUM_CALLS):
         complete(mcall(SENDER, "ping"), send=stub_send, receive=stub_receive)
 
-    assert len(set(refs)) == 3
+    assert len(set(refs)) == NUM_CALLS
 
 
 # ---------------------------------------------------------------------------

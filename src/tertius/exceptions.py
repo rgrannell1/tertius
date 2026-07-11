@@ -47,6 +47,21 @@ class NormalExitError(TertiusError):
         return (self.__class__, (self.pid,))
 
 
+class KilledError(TertiusError):
+    """Raised inside a worker when the broker kills it via EKill.
+
+    Delivered to thread workers, whose kill is cooperative; OS-process workers
+    are terminated with a signal instead.
+    """
+
+    def __init__(self, pid: Pid) -> None:
+        self.pid = pid
+        super().__init__(f"Process {pid} was killed")
+
+    def __reduce__(self) -> tuple:
+        return (self.__class__, (self.pid,))
+
+
 class JoinTimeoutError(TertiusError):
     """Raised when a joining process gets no handshake reply from the broker in time."""
 

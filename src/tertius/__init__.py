@@ -1,4 +1,5 @@
 # Public API for the Tertius erlang-style process runtime.
+from tertius.constants import SpawnMode
 from tertius.effects import (
     EEmit,
     EKill,
@@ -17,6 +18,7 @@ from tertius.exceptions import (
     DeadProcessError,
     JoinRejectedError,
     JoinTimeoutError,
+    KilledError,
     LinkedCrashError,
     NormalExitError,
     ProcessCrashError,
@@ -25,6 +27,7 @@ from tertius.exceptions import (
 from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
 from tertius.transport_types import (
     CurveClientKeys,
+    CurveKeyPaths,
     CurveSecurity,
     CurveServerKeys,
     IpcTransport,
@@ -41,11 +44,13 @@ __all__ = [
     "CallMsg",
     "CastMsg",
     "CurveClientKeys",
+    "CurveKeyPaths",
     "CurveSecurity",
     "CurveServerKeys",
     "DeadProcessError",
     "JoinRejectedError",
     "JoinTimeoutError",
+    "KilledError",
     "LinkedCrashError",
     "NormalExitError",
     "Envelope",
@@ -68,6 +73,7 @@ __all__ = [
     "ProcessCrashError",
     "ReplyMsg",
     "Scope",
+    "SpawnMode",
     "TertiusError",
     "TcpTransport",
     "Transport",

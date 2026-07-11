@@ -5,9 +5,12 @@ from typing import Any
 
 from tertius.effects import EReceive, ESelf, ESpawn
 from tertius.types import CastMsg, Envelope, Pid
-from tests.fixtures import run_marco_polo_and_report
+from tests.fixtures import MARCO_POLO_ROUNDS, run_marco_polo_and_report
 
 _SCOPE = {"run_marco_polo_and_report": run_marco_polo_and_report}
+
+# Worker processes spawned by the root
+NUM_WORKERS = 3
 
 
 def root(num_workers: int) -> Generator[Any, Any, list[Any]]:
@@ -35,6 +38,7 @@ def root(num_workers: int) -> Generator[Any, Any, list[Any]]:
 def test_three_marco_polo_processes(collect):
     """Proves three independent processes each produce (3, 3) via marco polo."""
 
-    results, _ = collect(root, 3, scope=_SCOPE)
-    assert len(results) == 3
-    assert all(res == (3, 3) for res in results), results
+    expected = (MARCO_POLO_ROUNDS, MARCO_POLO_ROUNDS)
+    results, _ = collect(root, NUM_WORKERS, scope=_SCOPE)
+    assert len(results) == NUM_WORKERS
+    assert all(res == expected for res in results), results

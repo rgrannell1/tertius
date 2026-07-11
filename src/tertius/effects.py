@@ -4,16 +4,18 @@ from typing import Any, ClassVar, LiteralString
 
 from orbis import Effect, Event
 
+from tertius.constants import SpawnMode
 from tertius.types import Envelope, Pid
 
 
 @dataclass
 class ESpawn(Effect[Pid]):
-    """Spawn a new process"""
+    """Spawn a new process; mode None inherits the VM's default spawn mode."""
 
     tag: ClassVar[LiteralString] = "spawn"
     fn_name: str
     args: tuple[Any, ...] = field(default=())
+    mode: SpawnMode | None = field(default=None)
 
 
 @dataclass

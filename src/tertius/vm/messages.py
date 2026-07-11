@@ -22,7 +22,7 @@ The frames we pass have the layout (ROUTER-received):
 import pickle
 from typing import Any
 
-from tertius.constants import Cmd
+from tertius.constants import Cmd, SpawnMode
 from tertius.exceptions import LinkedCrashError, ProcessCrashError
 from tertius.types import Codec, Envelope, Pid
 
@@ -76,16 +76,21 @@ def encode_linked_crash_notification(
 # ---------------------------------------------------------------------------
 
 
-def _encode_spawn(fn_name: str, args: tuple[Any, ...]) -> list[bytes]:
-    return [Cmd.SPAWN, fn_name.encode(), pickle.dumps(args)]
+def _encode_spawn(
+    fn_name: str, args: tuple[Any, ...], mode: SpawnMode | None
+) -> list[bytes]:
+    # An empty mode frame means "use the VM's default spawn mode".
+    mode_frame = mode.value.encode() if mode is not None else b""
+    return [Cmd.SPAWN, fn_name.encode(), pickle.dumps(args), mode_frame]
 
 
-def _decode_spawn(frames: list[bytes]) -> tuple[str, tuple[Any, ...]]:
+def _decode_spawn(frames: list[bytes]) -> tuple[str, tuple[Any, ...], SpawnMode | None]:
     payload = frame_payload(frames)
-    return payload[0].decode(), pickle.loads(payload[1])
+    mode = SpawnMode(payload[2].decode()) if payload[2] else None
+    return payload[0].decode(), pickle.loads(payload[1]), mode
 
 
-spawn: Codec[tuple[str, tuple[Any, ...]]] = Codec(
+spawn: Codec[tuple[str, tuple[Any, ...], SpawnMode | None]] = Codec(
     encode=_encode_spawn, decode=_decode_spawn
 )
 

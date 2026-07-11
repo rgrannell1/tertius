@@ -10,6 +10,9 @@ from tertius.effects import EReceive
 from tertius.genserver import mcast
 from tertius.types import Envelope, Pid
 
+# Rounds each side of marco polo must complete before the generator returns
+MARCO_POLO_ROUNDS = 3
+
 
 @dataclass
 class EMarco(Effect[int]):
@@ -38,7 +41,7 @@ def marco_polo() -> Generator[EMarco | EPolo, int, tuple[int, int]]:
         marco = yield EMarco(marco)
         polo = yield EPolo(polo)
 
-        if marco >= 3 and polo >= 3:
+        if marco >= MARCO_POLO_ROUNDS and polo >= MARCO_POLO_ROUNDS:
             return (marco, polo)
 
 

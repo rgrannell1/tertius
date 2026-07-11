@@ -8,6 +8,15 @@ from tertius.genserver import gen_server, mcall, mcall_timeout, mcast
 from tertius.types import Pid
 from tertius.vm import run
 
+# Increments cast at the counter before reading it back
+CAST_INCREMENTS = (5, 3)
+
+# Counter start values, named per scenario so assertions match their spawn args
+CALL_INITIAL = 10
+UNKNOWN_CAST_INITIAL = 7
+TIMEOUT_INITIAL = 42
+SLEEPING_INITIAL = 99
+
 # ---------------------------------------------------------------------------
 # Counter process
 # ---------------------------------------------------------------------------
@@ -52,15 +61,15 @@ def _root_cast_then_call() -> Generator[Any, Any, Any]:
         fn_name="run_counter",
         args=(0,),
     )
-    yield from mcast(server, ("inc", 5))
-    yield from mcast(server, ("inc", 3))
+    for increment in CAST_INCREMENTS:
+        yield from mcast(server, ("inc", increment))
     return (yield from mcall(server, "get"))
 
 
 def _root_call_does_not_mutate() -> Generator[Any, Any, Any]:
     server: Pid = yield ESpawn(
         fn_name="run_counter",
-        args=(10,),
+        args=(CALL_INITIAL,),
     )
     first = yield from mcall(server, "get")
     second = yield from mcall(server, "get")
@@ -70,7 +79,7 @@ def _root_call_does_not_mutate() -> Generator[Any, Any, Any]:
 def _root_unknown_cast_ignored() -> Generator[Any, Any, Any]:
     server: Pid = yield ESpawn(
         fn_name="run_counter",
-        args=(7,),
+        args=(UNKNOWN_CAST_INITIAL,),
     )
     yield from mcast(server, "unknown-message")
     return (yield from mcall(server, "get"))
@@ -88,7 +97,7 @@ def test_cast_accumulates_state_across_processes(collect):
     """Proves that cast messages mutate gen_server state in a real process."""
 
     result, _ = collect(_root_cast_then_call, scope=_SCOPE)
-    assert result == 8
+    assert result == sum(CAST_INCREMENTS)
 
 
 def test_call_does_not_mutate_state_across_processes(collect):
@@ -96,14 +105,14 @@ def test_call_does_not_mutate_state_across_processes(collect):
 
     result, _ = collect(_root_call_does_not_mutate, scope=_SCOPE)
     first, second = result
-    assert first == second == 10
+    assert first == second == CALL_INITIAL
 
 
 def test_unknown_cast_leaves_state_unchanged_across_processes(collect):
     """Proves that an unrecognised cast body leaves state intact in a real process."""
 
     result, _ = collect(_root_unknown_cast_ignored, scope=_SCOPE)
-    assert result == 7
+    assert result == UNKNOWN_CAST_INITIAL
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +123,7 @@ def test_unknown_cast_leaves_state_unchanged_across_processes(collect):
 def _root_call_timeout_succeeds() -> Generator[Any, Any, Any]:
     server: Pid = yield ESpawn(
         fn_name="run_counter",
-        args=(42,),
+        args=(TIMEOUT_INITIAL,),
     )
     return (yield from mcall_timeout(server, "get", timeout_ms=2000))
 
@@ -129,7 +138,7 @@ def test_call_timeout_returns_reply_when_server_is_alive(collect):
     """Proves that call_timeout returns the reply when the server responds in time."""
 
     result, _ = collect(_root_call_timeout_succeeds, scope=_SCOPE)
-    assert result == 42
+    assert result == TIMEOUT_INITIAL
 
 
 def test_call_timeout_returns_none_when_server_is_unreachable(collect):
@@ -184,7 +193,7 @@ def _root_emitting_cast() -> Generator[Any, Any, None]:
 
 
 def _root_sleeping_init() -> Generator[Any, Any, Any]:
-    server: Pid = yield ESpawn(fn_name="run_sleeping_init_counter", args=(99,))
+    server: Pid = yield ESpawn(fn_name="run_sleeping_init_counter", args=(SLEEPING_INITIAL,))
     return (yield from mcall(server, "get"))
 
 
@@ -206,4 +215,4 @@ def test_generator_init_can_yield_process_effects(collect):
     """Proves that a generator init function can yield effects handled by the process runtime."""
 
     result, _ = collect(_root_sleeping_init, scope=_EFFECTFUL_SCOPE)
-    assert result == 99
+    assert result == SLEEPING_INITIAL
